@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'none'">
+<title>Как начать</title>
+<!--
+  Пошаговая инструкция для нового человека: аккаунт GitHub → своя копия шаблона → вход на страницу заполнения → первая оценка.
+  Отдельная страница рядом с index.html (тот же сайт Cloudflare: /start). Ничего не читает и не пишет; помнит только номер шага в этом браузере.
+  Картинки — нарисованные схемы экранов GitHub (не снимки): показывают главное и не устаревают при смене дизайна.
+  Ссылка «Создать копию» — параметры github.com/new (template_owner, template_name, name, visibility), документация GitHub «Creating a new repository».
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Onest:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+:root{
+  --bg:#F2F4F1; --panel:#FFFFFF; --ink:#16201B; --muted:#5E6B64; --line:#D9DFDA;
+  --accent:#2C55C9; --accent-soft:#E3E9FA; --weak:#C2412D; --weak-soft:#F8E3DF;
+  --strong:#1D7F51; --strong-soft:#DDF0E6; --warn:#9A6B00; --warn-soft:#F6EBCB;
+  --gh-bg:#0D1117; --gh-ink:#E6EDF3; --gh-muted:#8B949E; --gh-line:#30363D; --gh-field:#010409; --gh-green:#238636;
+  --display:"Unbounded","Arial Black",system-ui,sans-serif;
+  --body:"Onest",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+  color-scheme:light}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#111613; --panel:#19201C; --ink:#E7ECE8; --muted:#97A39C; --line:#2C3530;
+  --accent:#7D9CF2; --accent-soft:#1E2846; --weak:#F0806C; --weak-soft:#3A1F1A;
+  --strong:#5BC892; --strong-soft:#173226; --warn:#E3B34A; --warn-soft:#352A12; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#111613; --panel:#19201C; --ink:#E7ECE8; --muted:#97A39C; --line:#2C3530;
+  --accent:#7D9CF2; --accent-soft:#1E2846; --weak:#F0806C; --weak-soft:#3A1F1A;
+  --strong:#5BC892; --strong-soft:#173226; --warn:#E3B34A; --warn-soft:#352A12; color-scheme:dark}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.5}
+.top{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+.top .in{max-width:640px;margin:0 auto;padding:10px 16px;display:flex;gap:12px;align-items:center}
+.brand{font-family:var(--display);font-weight:500;font-size:14px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dots{display:flex;gap:5px}
+.dots i{width:22px;height:6px;border-radius:3px;background:var(--line)}
+.dots i.done{background:var(--strong)} .dots i.now{background:var(--accent)}
+.wrap{max-width:640px;margin:0 auto;padding:18px 16px 40px;display:grid;gap:16px}
+.kicker{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+h1{font-family:var(--display);font-weight:500;font-size:24px;line-height:1.25;margin:4px 0 0;text-wrap:balance}
+h2{font-family:var(--display);font-weight:500;font-size:16px;margin:0}
+p{margin:0}
+.lead{color:var(--muted)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;display:grid;gap:12px}
+ol.do{margin:0;padding:0;list-style:none;counter-reset:n;display:grid;gap:12px}
+ol.do>li{counter-increment:n;display:grid;grid-template-columns:28px minmax(0,1fr);gap:10px;align-items:start}
+ol.do>li::before{content:counter(n);font-family:var(--mono);font-size:13px;width:28px;height:28px;border-radius:50%;
+  display:grid;place-items:center;background:var(--accent-soft);color:var(--accent)}
+.en{font-weight:600;white-space:nowrap}
+.ru{color:var(--muted)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;font:600 16px var(--body);border-radius:12px;
+  padding:13px 18px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer;text-decoration:none;text-align:center}
+.btn.main{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.go{width:100%}
+.btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.nav{display:grid;grid-template-columns:auto 1fr;gap:10px}
+.copy{display:flex;gap:8px;align-items:stretch}
+.copy code{flex:1;min-width:0;font:500 15px var(--mono);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;overflow-wrap:anywhere}
+.copy button{font:600 14px var(--body);border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--accent);padding:0 12px;cursor:pointer}
+.tip{font-size:14px;color:var(--strong);background:var(--strong-soft);border-radius:10px;padding:10px 12px}
+.warn{font-size:14px;color:var(--warn);background:var(--warn-soft);border-radius:10px;padding:10px 12px}
+details{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 16px}
+details summary{cursor:pointer;font-weight:600;color:var(--accent)}
+details ul{margin:10px 0 0;padding-left:18px;display:grid;gap:8px;font-size:15px}
+/* схема экрана GitHub */
+.shot{display:grid;gap:6px}
+.shot .cap{font-size:12px;color:var(--muted)}
+.scr{background:var(--gh-bg);color:var(--gh-ink);border:1px solid var(--gh-line);border-radius:14px;padding:14px;
+  font:14px -apple-system,"Segoe UI",system-ui,sans-serif;display:grid;gap:10px;max-width:420px}
+.scr .bar{display:flex;align-items:center;gap:8px;color:var(--gh-muted);font-size:12px;border-bottom:1px solid var(--gh-line);padding-bottom:8px}
+.scr .bar b{width:16px;height:16px;border-radius:50%;background:var(--gh-ink);display:inline-block}
+.scr .h{font-size:17px;font-weight:600}
+.scr .f{display:grid;gap:4px}
+.scr .f span{font-size:13px;font-weight:600}
+.scr .f div{background:var(--gh-field);border:1px solid var(--gh-line);border-radius:6px;padding:7px 9px;color:var(--gh-muted);font-size:13px;min-height:33px}
+.scr .r{display:flex;gap:8px;align-items:flex-start;border:1px solid var(--gh-line);border-radius:6px;padding:8px}
+.scr .r i{width:14px;height:14px;border-radius:50%;border:2px solid var(--gh-muted);flex:none;margin-top:3px}
+.scr .r.on i{border:4px solid #4493F8}
+.scr .r small{display:block;color:var(--gh-muted);font-size:12px}
+.scr .g{background:var(--gh-green);color:#fff;border-radius:6px;padding:8px 12px;font-weight:600;text-align:center;justify-self:start}
+.scr .s{background:#21262D;border:1px solid var(--gh-line);border-radius:6px;padding:7px 12px;font-weight:600;justify-self:start}
+.scr .t{color:var(--gh-muted);font-size:13px}
+.scr .code{display:flex;gap:6px}
+.scr .code i{width:30px;height:36px;border:1px solid var(--gh-line);border-radius:6px;background:var(--gh-field)}
+.scr .hl{outline:3px solid #F5A524;outline-offset:3px;position:relative}
+.scr .hl::after{content:attr(data-n);position:absolute;top:-12px;right:-12px;width:22px;height:22px;border-radius:50%;
+  background:#F5A524;color:#111;font:700 12px/22px var(--body);text-align:center}
+.done{text-align:center;justify-items:center}
+.done .big{font-size:48px;line-height:1}
+@media (max-width:380px){h1{font-size:21px}.dots i{width:14px}}
+</style>
+</head>
+<body>
+<div class="top"><div class="in"><div class="brand">Цифровая копия — как начать</div><div class="dots" id="dots" aria-hidden="true"></div></div></div>
+<main class="wrap" id="app"></main>
+
+<script>
+'use strict';
+// ───────── Настройки ─────────
+const TPL_OWNER = 'HaMiNik91', TPL_NAME = 'tsifrovaya-kopiya-shablon';
+const PAGE = '/';                                   // страница заполнения на этом же сайте
+const COPY_NAME = 'tsifrovaya-kopiya';
+const NEW_COPY = 'https://github.com/new?' + new URLSearchParams({
+  template_owner: TPL_OWNER, template_name: TPL_NAME, name: COPY_NAME, visibility: 'private',
+  description: 'Моя цифровая копия'}).toString();
+const README = `https://github.com/${TPL_OWNER}/${TPL_NAME}#readme`;
+
+const store = {get(k){try{return localStorage.getItem(k)}catch(e){return null}}, set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+const en = (e, r) => `<span class="en">${e}</span> <span class="ru">(${r})</span>`;
+const ext = (href, text, cls='btn main go') => `<a class="${cls}" href="${href}" target="_blank" rel="noopener">${text} ↗</a>`;
+const copy = v => `<div class="copy"><code>${v}</code><button type="button" data-copy="${v}">Скопировать</button></div>`;
+const shot = (cap, html) => `<div class="shot"><div class="scr">${html}</div><div class="cap">${cap}</div></div>`;
+const bar = t => `<div class="bar"><b></b>${t}</div>`;
+const fld = (n, v, hl) => `<div class="f${hl?' hl':''}"${hl?` data-n="${hl}"`:''}><span>${n}</span><div>${v}</div></div>`;
+const help = items => `<details><summary>Не получается?</summary><ul>${items.map(i=>`<li>${i}</li>`).join('')}</ul></details>`;
+
+const STEPS = [
+// 0 — начало
+{t:'Начало', h:() => `
+  <div><div class="kicker">Добро пожаловать</div><h1>Своя «Цифровая копия» за 15 минут</h1></div>
+  <p class="lead">Это ваша карта жизни из 12 сфер: здоровье, деньги, семья, работа и другие. В каждой — линейки от 1 до 10. Вы отмечаете, где вы сейчас, и видите, какой шаг следующий.</p>
+  <div class="card"><h2>Что понадобится</h2>
+    <ol class="do">
+      <li><span>Телефон или компьютер и <b>ваша почта</b> — на неё придёт код.</span></li>
+      <li><span>Около 15 минут.</span></li>
+      <li><span>Ничего платить не нужно и программ ставить не нужно.</span></li></ol></div>
+  <div class="card"><h2>Где всё хранится</h2>
+    <p>На <b>GitHub</b> — это большой сайт для хранения файлов. Там у вас будет своё <b>закрытое хранилище</b>: папка, которую видите только вы. Сайт на английском — эта страница переведёт каждую кнопку.</p></div>
+  <div class="warn">Если вы открыли эту страницу из мессенджера (WhatsApp, Telegram), лучше откройте её в обычном браузере — Chrome или Safari: меню ⋮ → «Открыть в браузере». Тогда вход на сайты пройдёт без сбоев.</div>
+  <button class="btn main go" data-go="1">Начать</button>`},
+// 1 — аккаунт
+{t:'Аккаунт', h:() => `
+  <div><div class="kicker">Шаг 1 из 5</div><h1>Аккаунт на GitHub</h1></div>
+  <p class="lead">Аккаунт — это ваш вход на GitHub: почта, пароль и имя. Бесплатно.</p>
+  <button class="btn go" data-go="3">У меня уже есть аккаунт — пропустить</button>
+  <div class="card"><ol class="do">
+    <li><span>Нажмите кнопку ниже — GitHub откроется в новой вкладке. Потом возвращайтесь сюда.</span></li>
+    <li><span>${en('Email','почта')} — ваша почта.</span></li>
+    <li><span>${en('Password','пароль')} — не короче 15 знаков, или не короче 8, но тогда с цифрой и маленькой буквой. Запишите его.</span></li>
+    <li><span>${en('Username','имя аккаунта')} — латиницей, без пробелов, например <code>ivan-petrov</code>. Если занято — сайт скажет, допишите цифры.</span></li>
+    <li><span>${en('Your Country/Region','ваша страна')} — выберите из списка.</span></li>
+    <li><span>Нажмите ${en('Continue','продолжить')} или ${en('Create account','создать аккаунт')}.</span></li></ol>
+  ${ext('https://github.com/signup','Открыть регистрацию на GitHub')}</div>
+  ${shot('Схема экрана регистрации. Цифры — порядок полей.', bar('github.com/signup') + `<div class="h">Sign up to GitHub</div>`
+    + fld('Email','ivan@mail.ru',1) + fld('Password','••••••••••••••••',2) + fld('Username','ivan-petrov',3)
+    + fld('Your Country/Region','Spain ▾',4) + `<div class="g hl" data-n="5">Create account ›</div>`)}
+  ${help(['Сайт пишет, что почта уже занята — значит, аккаунт у вас уже есть: нажмите «Пропустить» выше и войдите.',
+    'Пароль не подходит — сделайте длиннее, добавьте цифру.',
+    'Страница на английском непонятна — в Chrome: меню ⋮ → «Перевести». Названия кнопок здесь даны как на экране.'])}`},
+// 2 — проверка и код
+{t:'Код', h:() => `
+  <div><div class="kicker">Шаг 1 из 5 — продолжение</div><h1>Проверка и код из письма</h1></div>
+  <div class="card"><ol class="do">
+    <li><span>GitHub попросит доказать, что вы человек: ${en('Verify','проверить')} и простое задание с картинками.</span></li>
+    <li><span>Откройте почту. Письмо от <b>GitHub</b> с кодом из нескольких цифр. Нет во «Входящих» — посмотрите «Спам».</span></li>
+    <li><span>Впишите код на GitHub.</span></li>
+    <li><span>Если сайт спрашивает о вас (работа, интересы) — ${en('Skip','пропустить')} или любые ответы. Про план — ${en('Free','бесплатный')}.</span></li></ol></div>
+  ${shot('Схема: сюда вписывается код из письма.', bar('github.com') + `<div class="h">You're almost done!</div><div class="t">We sent a launch code to ivan@mail.ru</div>`
+    + `<div class="code hl" data-n="1"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div class="g">Continue</div>`)}
+  <div class="tip">Готово, если вы видите страницу GitHub со своим именем или кружком-аватаркой справа вверху.</div>
+  ${help(['Письма нет 5 минут — нажмите на GitHub «Resend the code» (выслать снова) и проверьте «Спам».',
+    'Задание с картинками не проходит — нажмите обновить задание; можно включить звуковой вариант.'])}`},
+// 3 — своя копия
+{t:'Копия', h:() => `
+  <div><div class="kicker">Шаг 2 из 5</div><h1>Своя копия</h1></div>
+  <p class="lead">Сейчас вы сделаете своё закрытое хранилище — копию готового пустого каркаса. Всё уже выбрано, осталась одна кнопка.</p>
+  <div class="card"><ol class="do">
+    <li><span>Нажмите кнопку ниже. Если GitHub попросит войти — войдите тем аккаунтом, который создали.</span></li>
+    <li><span>Проверьте: ${en('Repository name','имя хранилища')} — <code>${COPY_NAME}</code>, выбрано ${en('Private','закрытое')}.</span></li>
+    <li><span>Внизу нажмите зелёную ${en('Create repository','создать хранилище')}.</span></li>
+    <li><span>Подождите несколько секунд — откроется ваше хранилище со списком папок.</span></li></ol>
+  ${ext(NEW_COPY,'Создать мою копию')}</div>
+  ${shot('Схема: так будет заполнено. Нажать нужно только зелёную кнопку.', bar('github.com/new') + `<div class="h">Create a new repository</div>`
+    + fld('Repository template', TPL_OWNER + '/' + TPL_NAME) + fld('Repository name', COPY_NAME)
+    + `<div class="r"><i></i><div>Public<small>Anyone can see</small></div></div>`
+    + `<div class="r on"><i></i><div>Private<small>Only you can see</small></div></div>`
+    + `<div class="g hl" data-n="1">Create repository</div>`)}
+  <div class="warn">Обязательно ${en('Private','закрытое')}: в хранилище будут ваши оценки и записи.</div>
+  ${help(['Имя занято (есть красная надпись под именем) — допишите в конце цифру: <code>tsifrovaya-kopiya-2</code>.',
+    'Открылась пустая форма без шаблона — нажмите кнопку «Создать мою копию» ещё раз, уже войдя в GitHub.',
+    `Не видно ${en('Private','закрытое')} — прокрутите форму вниз, до раздела Configuration или Visibility.`])}`},
+// 4 — вход на страницу
+{t:'Вход', h:() => `
+  <div><div class="kicker">Шаг 3 из 5</div><h1>Вход на страницу заполнения</h1></div>
+  <p class="lead">Страница заполнения — место, где вы ставите оценки нажатиями. Она пишет их в ваше хранилище. Нужно один раз разрешить ей это.</p>
+  <div class="card"><ol class="do">
+    <li><span>Нажмите кнопку ниже, на странице — <b>«Войти через GitHub»</b>.</span></li>
+    <li><span>На GitHub — зелёная ${en('Authorize','разрешить')}.</span></li>
+    <li><span>Вернётесь на страницу. Нажмите <b>«Поставить на хранилище»</b>.</span></li>
+    <li><span>Выберите ${en('Only select repositories','только выбранные хранилища')}, в списке отметьте <code>${COPY_NAME}</code> и нажмите ${en('Install','установить')}.</span></li>
+    <li><span>Откроется колесо из 12 сфер. Вход сделан.</span></li></ol>
+  ${ext(PAGE,'Открыть страницу заполнения')}</div>
+  ${shot('Схема пункта 4: выбрать только своё хранилище.', bar('github.com/apps/…/installations/new') + `<div class="h">Install Tsifrovaya Kopiya</div>`
+    + `<div class="r"><i></i><div>All repositories</div></div>`
+    + `<div class="r on hl" data-n="1"><i></i><div>Only select repositories</div></div>`
+    + fld('Select repositories', '☑ ' + COPY_NAME, 2) + `<div class="g hl" data-n="3">Install</div>`)}
+  <div class="tip">У приложения есть право только на файлы этого одного хранилища. Ваш пароль страница не видит.</div>
+  ${help(['Вход «не прошёл проверку» — откройте страницу заполнения в Chrome или Safari (не из мессенджера) и войдите ещё раз в одном окне.',
+    'Колесо не открылось, а страница снова просит поставить — нажмите «Я уже поставил — проверить».',
+    'Отметили не то хранилище — откройте <a href="https://github.com/settings/installations" target="_blank" rel="noopener">github.com/settings/installations</a> → Configure → отметьте своё.'])}`},
+// 5 — первая оценка
+{t:'Оценка', h:() => `
+  <div><div class="kicker">Шаг 4 из 5</div><h1>Первая оценка</h1></div>
+  <div class="card"><ol class="do">
+    <li><span>На колесе нажмите любую сферу, например «Здоровье».</span></li>
+    <li><span>Выберите луч (часть сферы), затем зону — откроется линейка из 10 уровней: 1 — худшее, 10 — ваш идеал.</span></li>
+    <li><span>Найдите уровень, который про вас <b>сейчас</b>, нажмите его и кнопку <b>«Моя оценка — N»</b>.</span></li>
+    <li><span>Всё выше — зоны, лучи, сферы, колесо — посчитается само.</span></li></ol></div>
+  <div class="tip">Сомневаетесь между двумя уровнями — берите нижний: так легче подниматься ступень за ступенью.</div>
+  <div class="card"><h2>Ещё две кнопки</h2>
+    <p><b>«Изменить уровень»</b> — если текст уровня не про вас, перепишите его своими словами.</p>
+    <p><b>«Шаг вверх»</b> — что сделать, чтобы подняться на ступень; можно добавить в свой план.</p></div>
+  ${help(['Оценка не сохраняется — войдите заново (кнопка входа вверху страницы заполнения).',
+    'Передумали — нажмите другой уровень или «Снять оценку». Прошлые версии всё равно хранятся.'])}`},
+// 6 — дальше
+{t:'Дальше', h:() => `
+  <div class="card done"><div class="big">🎉</div><div class="kicker">Шаг 5 из 5</div><h1>Всё готово</h1>
+    <p class="lead">Оцените понемногу все 12 сфер — не обязательно за один раз.</p></div>
+  <div class="card"><h2>Когда сферы оценены</h2>
+    <p>На колесе внизу — <b>«Время и внимание»</b>: выберите до трёх главных сфер и сколько часов в неделю им отдавать. Это и есть главная польза — понятно, на что тратить силы.</p></div>
+  <div class="card"><h2>По желанию</h2>
+    <p><b>Claude</b> — для разговора о жизни: разбор дня, план недели, работа над убеждениями. В приложении Claude подключите GitHub и напишите в новом чате:</p>
+    ${copy('Подключи моё хранилище ИМЯ-АККАУНТА/' + COPY_NAME + ', прочитай README.md и CLAUDE.md и познакомься со мной.')}
+    <p class="ru">Вместо ИМЯ-АККАУНТА — ваше имя на GitHub.</p>
+    <p><b>Obsidian</b> — бесплатная программа, чтобы читать все файлы как связанную тетрадь. Claude поможет настроить.</p></div>
+  <div class="nav" style="grid-template-columns:1fr">${ext(PAGE,'Открыть страницу заполнения','btn main go')}
+    <a class="btn go" href="${README}" target="_blank" rel="noopener">Подробное описание ↗</a></div>`},
+];
+
+const app = document.getElementById('app'), dots = document.getElementById('dots');
+function cur(){ const n = parseInt((location.hash.match(/^#(\d+)$/)||[])[1], 10); return Number.isInteger(n) && n >= 0 && n < STEPS.length ? n : null; }
+function show(n){
+  store.set('start.step', String(n));
+  dots.innerHTML = STEPS.slice(1).map((s,i) => `<i class="${i+1 < n ? 'done' : i+1 === n ? 'now' : ''}"></i>`).join('');
+  let h = STEPS[n].h();
+  if (n > 0) h += `<div class="nav"><button class="btn" data-go="${n === 3 && store.get('start.skip') === '1' ? 1 : n-1}">← Назад</button>`
+    + (n < STEPS.length-1 ? `<button class="btn main" data-go="${n+1}">${n === 2 ? 'Код вписан — дальше' : n === 4 ? 'Колесо открылось — дальше' : 'Сделано — дальше'} →</button>` : '<span></span>') + `</div>`;
+  app.innerHTML = h; window.scrollTo(0,0);
+  const h1 = app.querySelector('h1'); if (h1){ document.title = h1.textContent + ' — Цифровая копия'; }
+}
+function go(n){ if (location.hash === '#'+n) show(n); else location.hash = '#'+n; }
+window.addEventListener('hashchange', () => { const n = cur(); show(n === null ? 0 : n); });
+app.addEventListener('click', e => {
+  const g = e.target.closest('[data-go]');
+  if (g){ const n = +g.dataset.go; const from = cur(); if (from === 1 && n === 3) store.set('start.skip','1'); if (from === 1 && n === 2) store.set('start.skip','0'); go(n); return; }
+  const c = e.target.closest('[data-copy]');
+  if (c){ const v = c.dataset.copy;
+    const ok = () => { c.textContent = 'Скопировано'; setTimeout(() => c.textContent = 'Скопировать', 1500); };
+    if (navigator.clipboard) navigator.clipboard.writeText(v).then(ok, () => {}); }
+});
+(function(){ const n = cur(); if (n !== null) return show(n);
+  const saved = parseInt(store.get('start.step'), 10);
+  show(Number.isInteger(saved) && saved > 0 && saved < STEPS.length ? saved : 0); })();
+</script>
+</body>
+</html>

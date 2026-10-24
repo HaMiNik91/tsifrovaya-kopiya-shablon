@@ -789,6 +789,7 @@ function loginView(){
   let h = `<h1>${live ? 'Ваше хранилище' : 'Вход в своё хранилище'}</h1>`;
   if (S.mode === 'embedded') h += `<div class="note">Это демо внутри Claude: вход здесь не работает. Он работает на странице заполнения (адрес помощника Cloudflare). Ниже — что увидит человек.</div>`;
   if (S.loginError) h += `<div class="note err">${esc(S.loginError)}</div>`;
+  if (!live && S.via !== 'app' && S.mode !== 'embedded') h += `<div class="step"><b class="t">Впервые здесь?</b><p class="desc" style="color:inherit">Сначала нужны аккаунт на GitHub и своя копия шаблона. Пошаговая инструкция проведёт за 15 минут.</p><div class="pick"><a class="btn main" href="start.html">Как начать — по шагам</a></div></div>`;
   if (live) h += `<div class="card"><div>Открыто: <b>${esc(S.owner)}/${esc(S.repo)}</b>, ветка ${esc(S.branch)}</div>
     <p class="legend">${S.via === 'app' ? 'Вход через GitHub: ключ продлевается сам, входить снова нужно раз в полгода.' : 'Вход по ключу доступа.'}</p>
     <div class="pick"><a class="btn" href="#/">К колесу</a>${S.via === 'app' && S.repos && S.repos.length > 1 ? '<button class="btn" data-act="repos">Другое хранилище</button>' : ''}<button class="btn danger" data-act="logout">Выйти на этом устройстве</button></div></div>`;
