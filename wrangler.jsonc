@@ -1,0 +1,22 @@
+// Настройки помощника Cloudflare «Войти через GitHub» (worker/vhod.js).
+// Cloudflare (Workers Builds) берёт их из хранилища при каждом изменении ветки main.
+// Секрет приложения сюда НЕ пишется — только в Cloudflare: Settings → Variables and Secrets → GITHUB_CLIENT_SECRET.
+{
+  "name": "tsifrovaya-kopiya",
+  "main": "worker/vhod.js",
+  "compatibility_date": "2026-09-01",
+  "workers_dev": true,
+  "assets": {
+    // страница заполнения — папка docs; пути /vhod/* сначала идут в помощника
+    "directory": "./docs",
+    "binding": "ASSETS",
+    "run_worker_first": ["/vhod/*"]
+  },
+  "vars": {
+    // открытые данные приложения GitHub (не секрет): Client ID и короткое имя приложения из его адреса
+    "GITHUB_CLIENT_ID": "Iv23lihz0UKi852Tvnyc",
+    "GITHUB_APP_SLUG": "tsifrovaya-kopiya-haminik91",
+    // другие адреса страницы, с которых можно входить (через запятую)
+    "ALLOWED_ORIGINS": "https://haminik91.github.io"
+  }
+}

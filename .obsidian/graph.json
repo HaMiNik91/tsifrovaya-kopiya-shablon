@@ -1,0 +1,51 @@
+{
+  "collapse-filter": false,
+  "search": "-path:\"80 Шаблоны\" -path:\"90 Архив\" (-path:\"/Опыт/\" OR [значимость:ключевое])",
+  "showTags": false,
+  "showAttachments": false,
+  "hideUnresolved": true,
+  "showOrphans": true,
+  "collapse-color-groups": false,
+  "colorGroups": [
+    {
+      "query": "[значимость:ключевое] [проработка:проработано]",
+      "color": {
+        "a": 1,
+        "rgb": 4431943
+      }
+    },
+    {
+      "query": "[значимость:ключевое] [влияние:минус]",
+      "color": {
+        "a": 1,
+        "rgb": 15022389
+      }
+    },
+    {
+      "query": "[тип:оглавление]",
+      "color": {
+        "a": 1,
+        "rgb": 2001125
+      }
+    },
+    {
+      "query": "path:\"00 Старт\"",
+      "color": {
+        "a": 1,
+        "rgb": 16485376
+      }
+    }
+  ],
+  "collapse-display": true,
+  "showArrow": false,
+  "textFadeMultiplier": 0,
+  "nodeSizeMultiplier": 1,
+  "lineSizeMultiplier": 1,
+  "collapse-forces": true,
+  "centerStrength": 0.5,
+  "repelStrength": 10,
+  "linkStrength": 1,
+  "linkDistance": 250,
+  "scale": 1,
+  "close": true
+}

@@ -1,0 +1,10 @@
+# Служебные файлы Obsidian, которые меняются при каждом открытии
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/cache
+.obsidian/plugins/*/data.json
+.trash/
+# Системный мусор
+.DS_Store
+Thumbs.db
+__pycache__/

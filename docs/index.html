@@ -1,0 +1,966 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!--CSP--><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https://api.github.com https://raw.githubusercontent.com; img-src 'self' data:"><!--/CSP-->
+<title>Цифровая копия</title>
+<!--
+  Страница заполнения «Цифровой копии» (План — Шаблон для других, этап 4).
+  Читает и пишет файлы закрытого хранилища человека через GitHub API:
+    • оценка — строка в свойстве `оценки` шапки луча (+ `оценено`, `обновлено`);
+    • «Изменить уровень» — текст уровня в таблице луча;
+    • «Шаг вверх» — новый файл в папке «Путь» сферы;
+    • «Время и внимание» — свойства `важность`, `приоритет`, `часы` в шапке «NN Шкала».
+  Оценки зон, лучей и сфер страница считает сама по правилу shkala.py; в файлы их пишет GitHub Actions хранилища.
+  Источник данных: живой (ключ доступа), открытый шаблон без ключа (только просмотр) или встроенные файлы (window.DEMO_FILES).
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Onest:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+:root{
+  --bg:#F2F4F1; --panel:#FFFFFF; --ink:#16201B; --muted:#5E6B64; --line:#D9DFDA;
+  --accent:#2C55C9; --accent-soft:#E3E9FA; --weak:#C2412D; --weak-soft:#F8E3DF;
+  --strong:#1D7F51; --strong-soft:#DDF0E6; --warn:#9A6B00; --warn-soft:#F6EBCB;
+  --display:"Unbounded","Arial Black",system-ui,sans-serif;
+  --body:"Onest",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#111613; --panel:#19201C; --ink:#E7ECE8; --muted:#97A39C; --line:#2C3530;
+  --accent:#7D9CF2; --accent-soft:#1E2846; --weak:#F0806C; --weak-soft:#3A1F1A;
+  --strong:#5BC892; --strong-soft:#173226; --warn:#E3B34A; --warn-soft:#352A12; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#111613; --panel:#19201C; --ink:#E7ECE8; --muted:#97A39C; --line:#2C3530;
+  --accent:#7D9CF2; --accent-soft:#1E2846; --weak:#F0806C; --weak-soft:#3A1F1A;
+  --strong:#5BC892; --strong-soft:#173226; --warn:#E3B34A; --warn-soft:#352A12; color-scheme:dark}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45}
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
+.top .in{max-width:720px;margin:0 auto;padding:10px 16px;display:flex;gap:10px;align-items:center}
+.brand{font-family:var(--display);font-weight:500;font-size:14px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pill{font-size:12px;font-weight:600;padding:4px 9px;border-radius:999px;white-space:nowrap;background:var(--line);color:var(--muted)}
+.pill.ok{background:var(--strong-soft);color:var(--strong)} .pill.busy{background:var(--accent-soft);color:var(--accent)}
+.pill.err{background:var(--weak-soft);color:var(--weak)} .pill.demo{background:var(--warn-soft);color:var(--warn)}
+.icon{all:unset;cursor:pointer;font-size:13px;font-weight:600;color:var(--accent);padding:4px 2px}
+.icon:focus-visible{outline:2px solid var(--accent);border-radius:4px}
+.wrap{max-width:720px;margin:0 auto;padding:16px 16px 48px;display:grid;gap:16px}
+.crumbs{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:13px;color:var(--muted)}
+.crumbs a{color:var(--accent);font-weight:600;text-decoration:none}
+.head{display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:center}
+.big{font-family:var(--display);font-weight:700;font-size:56px;line-height:1;font-variant-numeric:tabular-nums;
+  background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;min-width:96px;text-align:center}
+.big small{display:block;font-family:var(--body);font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-top:6px}
+h1{font-family:var(--display);font-weight:500;font-size:22px;margin:0;text-wrap:balance}
+h2{font-family:var(--display);font-weight:500;font-size:17px;margin:0}
+.sub{color:var(--muted);font-size:13px;margin-top:4px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.chip{font-size:12px;font-weight:600;padding:3px 8px;border-radius:999px;white-space:nowrap}
+.chip.weak{background:var(--weak-soft);color:var(--weak)} .chip.strong{background:var(--strong-soft);color:var(--strong)}
+.chip.none{background:var(--line);color:var(--muted)}
+.radar{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:8px}
+.radar svg{display:block;width:100%;height:auto;max-width:610px;margin:0 auto}
+.radar .hit{cursor:pointer;outline:none}
+.radar .hit:hover text,.radar .hit:focus-visible text{text-decoration:underline}
+.rows{display:grid;gap:2px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:6px}
+.row{display:grid;grid-template-columns:minmax(0,1fr) 92px 40px 14px;gap:10px;align-items:center;
+  padding:10px;border-radius:10px;color:inherit;text-decoration:none}
+.row:hover{background:var(--bg)} .row:focus-visible{outline:2px solid var(--accent)}
+.row .name{min-width:0;font-weight:500}
+.row .name em{display:block;font-style:normal;font-size:12px;color:var(--muted);font-weight:400}
+.bar{height:8px;border-radius:4px;background:var(--line);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent);border-radius:4px}
+.row.weak .bar i{background:var(--weak)} .row.strong .bar i{background:var(--strong)}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right;font-size:15px}
+.row.weak .num{color:var(--weak)} .row.strong .num{color:var(--strong)}
+.arrow{color:var(--muted)}
+.calc{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:6px;overflow-wrap:anywhere}
+.legend{font-size:12px;color:var(--muted);margin:0}
+.desc{font-size:14px;color:var(--muted);margin:0}
+.note{font-size:13px;color:var(--warn);background:var(--warn-soft);border-radius:10px;padding:10px 12px}
+.note.err{color:var(--weak);background:var(--weak-soft)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;display:grid;gap:10px}
+.ladder{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:6px;display:grid;gap:2px}
+.ladder .lh{display:flex;gap:10px;align-items:baseline;justify-content:space-between;margin:8px 10px 6px}
+.ladder .lh h3{font-size:15px;margin:0;font-weight:600}
+.ladder .lh span{font-family:var(--mono);color:var(--muted);font-size:13px;white-space:nowrap}
+.lv{all:unset;box-sizing:border-box;display:grid;grid-template-columns:30px minmax(0,1fr);gap:10px;padding:9px 10px;border-radius:10px;align-items:start;cursor:pointer}
+.lv:hover{background:var(--bg)} .lv:focus-visible{outline:2px solid var(--accent)}
+.lv b{font-family:var(--mono);font-weight:500;color:var(--muted);text-align:right;font-variant-numeric:tabular-nums}
+.lv.cur{background:var(--accent-soft)} .lv.cur b{color:var(--accent)}
+.lv.goal{background:var(--strong-soft)} .lv.goal b{color:var(--strong)}
+.lv.sel{outline:2px solid var(--accent);outline-offset:-2px}
+.lv .tag{display:inline-block;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;margin-right:6px}
+.lv.cur .tag{color:var(--accent)} .lv.goal .tag{color:var(--strong)}
+.act{display:flex;flex-wrap:wrap;gap:8px;padding:4px 10px 10px 50px}
+.btn{font:600 14px var(--body);border-radius:10px;padding:10px 14px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer}
+.btn.main{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.danger{color:var(--weak)}
+.btn:disabled{opacity:.5;cursor:default}
+.btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+textarea,input[type=text],input[type=password]{width:100%;font:15px var(--body);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px}
+textarea{min-height:90px;resize:vertical}
+label{font-size:13px;font-weight:600;display:grid;gap:6px}
+.pick{display:flex;gap:6px;flex-wrap:wrap}
+.pick button{min-width:42px}
+.pick button.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.step{background:var(--strong-soft);border-radius:14px;padding:14px;display:grid;gap:10px}
+.step b.t{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--strong)}
+details{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:10px 14px}
+details summary{cursor:pointer;font-weight:600}
+details .prose{margin-top:8px}
+.prose{font-size:14px;display:grid;gap:6px}
+.prose p{margin:0} .prose ul,.prose ol{margin:0;padding-left:20px}
+.tabs{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin-inline:-16px;padding-inline:16px}
+.tabs::-webkit-scrollbar{display:none}
+.tabs a{flex:none;white-space:nowrap;font:500 13px var(--body);color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:6px 11px;text-decoration:none}
+.tabs a b{margin-left:6px;color:var(--muted);font-weight:600}
+.tabs a.on{background:var(--accent-soft);border-color:var(--accent)} .tabs a.on b{color:var(--accent)}
+.toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);max-width:calc(100% - 32px);background:var(--ink);color:var(--bg);padding:10px 14px;border-radius:10px;font-size:14px;z-index:9;box-shadow:0 4px 16px rgba(0,0,0,.2)}
+.card.tw{grid-template-columns:minmax(0,1fr) 14px;color:inherit;text-decoration:none;gap:2px 10px}
+.card.tw span:not(.arrow){grid-column:1;font-size:13px;color:var(--muted)} .card.tw .arrow{grid-column:2;grid-row:1/3;align-self:center}
+.twh{display:flex;justify-content:space-between;gap:10px;align-items:baseline} .twh a{color:var(--ink);font-weight:600;text-decoration:none}
+.center{min-height:50vh;display:grid;place-items:center;color:var(--muted)}
+ol.how{margin:0;padding-left:22px;display:grid;gap:8px;font-size:14px}
+ol.how a{color:var(--accent);word-break:break-all}
+code{font-family:var(--mono);font-size:13px}
+@media (max-width:420px){.big{font-size:44px;min-width:80px}.row{grid-template-columns:minmax(0,1fr) 56px 34px 12px}.act{padding-left:10px}}
+@media (prefers-reduced-motion:no-preference){.bar i{transition:width .4s ease}}
+</style>
+</head>
+<body>
+<header class="top"><div class="in">
+  <div class="brand" id="brand">Цифровая копия</div>
+  <span class="pill" id="pill"></span>
+  <a class="icon" href="#/vhod" id="vhodLink">Вход</a>
+</div></header>
+<main class="wrap" id="app"><div class="center">Загрузка…</div></main>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+'use strict';
+// ───────── Настройки страницы ─────────
+const CFG = {
+  template: 'HaMiNik91/tsifrovaya-kopiya-shablon', // открытый шаблон: просмотр без ключа
+  oauth: '',                                         // адрес помощника «Войти через GitHub» (worker/vhod.js); пусто — тот же сайт, путь /vhod. Нет помощника — нет кнопки. Чужой адрес — добавить и в connect-src правила CSP в начале файла
+};
+const OAUTH = (CFG.oauth || (location.origin + '/vhod')).replace(/\/+$/, '');
+const API = 'https://api.github.com';
+const SPH_DIR = '10 Сферы';
+
+// ───────── Хранилище браузера (только удобство: ключ и имя хранилища на этом устройстве) ─────────
+const LS = {
+  get(k){ try { return localStorage.getItem(k); } catch(e){ return null; } },
+  set(k, v){ try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch(e){} },
+};
+
+// ───────── Состояние ─────────
+const S = {
+  mode: null,           // 'live' | 'public' | 'embedded'
+  owner: '', repo: '', branch: 'main', token: '',
+  app: null,            // приложение GitHub от помощника: {client_id, slug} — есть кнопка «Войти через GitHub»
+  via: '',              // как вошли: 'app' (через GitHub, ключ продлевается сам) | 'key' (ключ доступа)
+  repos: null,          // хранилища, где стоит приложение (после входа через GitHub)
+  files: new Map(),     // путь → {text, sha, pending:[op]}
+  paths: [],            // все пути хранилища
+  spheres: [],          // модель, собранная из файлов
+  queue: Promise.resolve(), busy: 0, error: '',
+  ui: {},               // состояние экрана: выбранный уровень, открытые формы
+};
+
+// ───────── Мелочи ─────────
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmt = v => v == null ? '—' : String(v);
+const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
+// Правило округления пользователя (как shkala.py): дробная часть до ,5 включительно — вниз, больше ,5 — вверх
+const roundU = v => { v = Math.round(v * 1e6) / 1e6; const f = Math.floor(v); return v - f > 0.5 ? f + 1 : f; };
+const num = x => x.toFixed(2).replace(/0+$/, '').replace(/\.$/, '').replace('.', ',');
+function toast(msg){ const t = document.getElementById('toast'); t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => t.hidden = true, 3500); }
+function md(text){ // короткий показ пояснений: абзацы, списки, **жирный**, *курсив*, [[ссылка|текст]]
+  const inl = s => esc(s).replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, '$2').replace(/\[\[([^\]]+)\]\]/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/(^|[^*])\*([^*]+)\*/g, '$1<i>$2</i>').replace(/`([^`]+)`/g, '<code>$1</code>');
+  let out = '', list = false;
+  for (const raw of text.split('\n')){
+    const ln = raw.trim();
+    if (/^[-*]\s/.test(ln)){ if (!list){ out += '<ul>'; list = true; } out += `<li>${inl(ln.slice(2))}</li>`; continue; }
+    if (list){ out += '</ul>'; list = false; }
+    if (ln && !/^(←|```|filters:|views:)/.test(ln)) out += `<p>${inl(ln)}</p>`;
+  }
+  return out + (list ? '</ul>' : '');
+}
+
+// ───────── Разбор файлов (тот же порядок, что в .github/scripts/shkala.py) ─────────
+const FM = /^---\n([\s\S]*?)\n---\n/;
+const ZONE_H = /^##\s+(?:[\d.]+\s+)?Зона\s+«([^»]+)»/;
+const SIGN_H = /^###\s+(?:[\d.]+\s+)?Признак\s+«([^»]+)»/;
+function readFm(text){
+  const m = text.match(FM), out = {}; let key = null;
+  if (!m) return out;
+  for (const line of m[1].split('\n')){
+    if (/^\s+-\s/.test(line) && key){
+      if (!Array.isArray(out[key])) out[key] = [];
+      out[key].push(line.slice(line.indexOf('-') + 1).trim().replace(/^"+|"+$/g, ''));
+    } else if (line.includes(':') && !line.startsWith(' ')){
+      const i = line.indexOf(':'); key = line.slice(0, i).trim();
+      const v = line.slice(i + 1).trim(); out[key] = v ? v.replace(/^"+|"+$/g, '') : [];
+    }
+  }
+  return out;
+}
+const cells = line => line.trim().replace(/^\|+|\|+$/g, '').split('|').map(c => c.trim());
+function parseBody(text){
+  const scopes = new Map(), sections = [];
+  const scope = (z, s) => { const k = JSON.stringify([z, s]); if (!scopes.has(k)) scopes.set(k, {v: [], h: []}); return scopes.get(k); };
+  let zone = null, sign = null, sec = {title: '', prose: []};
+  sections.push(sec);
+  const lines = text.split('\n');
+  const body0 = (text.match(FM) || [''])[0].split('\n').length - 1;
+  let i = body0;
+  while (i < lines.length){
+    const ln = lines[i];
+    if (ln.startsWith('## ') || ln.startsWith('# ')){
+      const m = ln.match(ZONE_H); zone = m ? m[1].trim() : null; sign = null;
+      sec = {title: ln.replace(/^#+\s*/, ''), prose: []}; sections.push(sec);
+    } else if (ln.startsWith('### ')){
+      const m = ln.match(SIGN_H); if (zone) sign = m ? m[1].trim() : null;
+      sec = {title: ln.replace(/^#+\s*/, ''), prose: []}; sections.push(sec);
+    }
+    const sc = scope(zone, sign);
+    if (/^\|\s*Уровень\s*\|\s*1\s*\|/.test(ln)){
+      let j = i + 2;
+      while (j < lines.length && lines[j].startsWith('|')){
+        const c = cells(lines[j]), lv = {};
+        c.slice(1, 11).forEach((v, k) => { if (v) lv[k + 1] = v; });
+        sc.h.push({kind: 'h', name: c[0], levels: lv, line: j, sec});
+        j++;
+      }
+      i = j; continue;
+    }
+    if (/^\|\s*Уровень\s*\|/.test(ln)){
+      const lv = {}, at = {}; let j = i + 2;
+      while (j < lines.length && lines[j].startsWith('|')){
+        const c = cells(lines[j]);
+        if (/^\d+$/.test(c[0]) && +c[0] >= 1 && +c[0] <= 10){ lv[+c[0]] = c.length > 1 ? c[1] : ''; at[+c[0]] = j; }
+        j++;
+      }
+      sc.v.push({kind: 'v', levels: lv, lines: at, sec});
+      i = j; continue;
+    }
+    if (!/^#/.test(ln)) sec.prose.push(ln);
+    i++;
+  }
+  return {get: (z, s) => scopes.get(JSON.stringify([z, s])), sections};
+}
+const startsRow = (rows, name) => { const n = name.toLowerCase(); return rows.find(r => r.name.toLowerCase().startsWith(n)) || null; };
+function zoneLadder(P, z){
+  const sc = P.get(z, null);
+  if (sc){ if (sc.v.length) return sc.v[0]; if (sc.h.length === 1) return sc.h[0]; }
+  return startsRow((P.get(null, null) || {h: []}).h, z);
+}
+function signLadder(P, z, s){
+  const sc = P.get(z, s);
+  if (sc){ if (sc.v.length) return sc.v[0]; if (sc.h.length === 1) return sc.h[0]; }
+  const own = P.get(z, null);
+  if (own){ const hit = startsRow(own.h, s); if (hit) return hit; }
+  return zoneLadder(P, z);
+}
+const rayLadder = P => ((P.get(null, null) || {v: []}).v[0]) || null;
+function findLadder(P, z, s){ return z == null ? rayLadder(P) : s == null ? zoneLadder(P, z) : signLadder(P, z, s); }
+
+function average(kids){
+  const vals = kids.map(k => k.score).filter(v => v != null);
+  if (!vals.length) return [null, null];
+  const avg = vals.reduce((a, b) => a + b, 0) / vals.length, r = roundU(avg);
+  let calc = `(${vals.join(' + ')}) / ${vals.length} = ${num(avg)} → ${r}`;
+  if (vals.length < kids.length) calc += `; без оценки, не учтено: ${kids.length - vals.length}`;
+  return [r, calc];
+}
+
+function buildRay(path, text){
+  const fm = readFm(text), stem = path.split('/').pop().replace(/\.md$/, '');
+  const name = (typeof fm['луч'] === 'string' && fm['луч']) || stem.split('— ').slice(1).join('— ') || stem;
+  let items = fm['оценки'] || []; if (typeof items === 'string') items = [items];
+  const P = parseBody(text), problems = [];
+  const ray = {path, stem, name, zones: [], score: null, calc: null, own: undefined, problems};
+  const zmap = new Map();
+  for (const it of items){
+    const m = it.match(/^(.+?):\s*(нет|\d+)\s*$/);
+    if (!m){ problems.push(`не читается строка оценки «${it}»`); continue; }
+    const parts = m[1].split(' / ').map(p => p.trim());
+    const val = m[2] === 'нет' ? null : +m[2];
+    if (val != null && (val < 1 || val > 10)){ problems.push(`оценка вне 1–10 в «${it}»`); continue; }
+    if (parts.length === 1 && parts[0] === name){ ray.own = val; continue; }
+    if (parts.length > 2){ problems.push(`больше двух уровней в «${it}»`); continue; }
+    let z = zmap.get(parts[0]);
+    if (!z){ z = {name: parts[0], score: null, signs: [], key: parts[0]}; zmap.set(parts[0], z); ray.zones.push(z); }
+    if (parts.length === 1) z.score = val;
+    else z.signs.push({name: parts[1], score: val, key: `${parts[0]} / ${parts[1]}`, zone: parts[0]});
+  }
+  if (ray.zones.length){
+    for (const z of ray.zones){
+      if (z.signs.length){
+        for (const s of z.signs){ s.lad = signLadder(P, z.name, s.name); }
+        z.lad = zoneLadder(P, z.name);
+        [z.score, z.calc] = average(z.signs);
+      } else z.lad = zoneLadder(P, z.name);
+      const sec = P.sections.find(x => ZONE_H.test('## ' + x.title) && x.title.includes(`«${z.name}»`));
+      z.prose = sec ? sec.prose.join('\n').trim() : '';
+    }
+    [ray.score, ray.calc] = average(ray.zones);
+  } else {
+    ray.score = ray.own ?? null; ray.key = name; ray.lad = rayLadder(P);
+  }
+  const top = P.sections.find(x => x.title.startsWith('Луч')) || P.sections[1] || {prose: []};
+  ray.descRaw = top.prose.map(l => l.trim()).filter(l => /^\*[^*].*\*$/.test(l));
+  ray.desc = ray.descRaw.map(l => l.slice(1, -1)).join(' ').split(/(?<=\.)\s+/).filter(x => !/`оценки`|считает программа/.test(x)).join(' ');
+  ray.leaves = ray.zones.length ? ray.zones.flatMap(z => z.signs.length ? z.signs : [z]) : [ray];
+  ray.rated = ray.leaves.filter(x => x.score != null).length;
+  if (!items.length) problems.push('в шапке нет свойства `оценки`');
+  return ray;
+}
+
+function build(){
+  const sph = new Map();
+  for (const p of S.paths){
+    const m = p.match(/^10 Сферы\/((\d\d) ([^/]+))\/Шкала\/[^/]+\.md$/);
+    if (m){ if (!sph.has(m[1])) sph.set(m[1], {dir: m[1], nn: m[2], name: m[3], rays: []}); sph.get(m[1]).rayPaths = (sph.get(m[1]).rayPaths || []).concat(p); }
+  }
+  const out = [];
+  for (const s of [...sph.values()].sort((a, b) => a.dir.localeCompare(b.dir))){
+    const scaleText = view(`${SPH_DIR}/${s.dir}/${s.nn} Шкала.md`) || '';
+    const order = [...scaleText.matchAll(/\[\[([^\]|#]+)/g)].map(m => m[1]);
+    const sfm = readFm(scaleText), n = v => { v = typeof v === 'string' ? parseFloat(v.replace(',', '.')) : NaN; return isFinite(v) ? v : null; };
+    const rays = [];
+    for (const p of s.rayPaths){
+      const t = view(p); if (t == null) continue;
+      if (readFm(t)['тип'] !== 'луч') continue;
+      rays.push(buildRay(p, t));
+    }
+    const idx = r => { const i = order.indexOf(r.stem); return i < 0 ? 999 : i; };
+    rays.sort((a, b) => idx(a) - idx(b) || a.stem.localeCompare(b.stem));
+    const [score, calc] = average(rays);
+    out.push({...s, rays, score, calc, rated: rays.filter(r => r.score != null).length,
+      scalePath: `${SPH_DIR}/${s.dir}/${s.nn} Шкала.md`, hasScale: !!scaleText, imp: n(sfm['важность']), prio: n(sfm['приоритет']), hours: n(sfm['часы'])});
+  }
+  S.spheres = out;
+}
+
+// ───────── Правки файла (применяются к тексту; при конфликте — заново к свежей версии) ─────────
+function touchFm(text, setters){
+  const m = text.match(FM); if (!m) throw new Error('у файла нет шапки');
+  let lines = m[1].split('\n');
+  for (const [k, v, after] of setters){
+    const i = lines.findIndex(l => l.split(':')[0].trim() === k && !l.startsWith(' '));
+    const line = v === '' || v == null ? `${k}:` : `${k}: ${v}`;
+    if (i >= 0) lines[i] = line;
+    else { const a = lines.findIndex(l => l.split(':')[0].trim() === after); lines.splice(a >= 0 ? a + 1 : lines.length, 0, line); }
+  }
+  return `---\n${lines.join('\n')}\n---\n` + text.slice(m[0].length);
+}
+function applyOp(text, op){
+  if (op.type === 'create'){ if (text != null) throw new Error('такой файл уже есть'); return op.content; }
+  if (text == null) throw new Error('файл не найден');
+  if (op.type === 'score'){
+    const m = text.match(FM); if (!m) throw new Error('у файла нет шапки');
+    const lines = m[1].split('\n'); let hit = -1;
+    lines.forEach((l, i) => {
+      const r = l.match(/^\s+-\s+"?(.+?):\s*(нет|\d+)"?\s*$/);
+      if (r && r[1].split(' / ').map(x => x.trim()).join(' / ') === op.key) hit = i;
+    });
+    if (hit < 0) throw new Error(`в шапке нет строки «${op.key}»`);
+    lines[hit] = `  - "${op.key}: ${op.val == null ? 'нет' : op.val}"`;
+    text = `---\n${lines.join('\n')}\n---\n` + text.slice(m[0].length);
+    return touchFm(text, [['оценено', op.date, 'луч'], ['обновлено', op.date, 'статус']]);
+  }
+  if (op.type === 'fm') return touchFm(text, [...op.sets, ['обновлено', op.date, 'статус']]);
+  if (op.type === 'level'){
+    const P = parseBody(text), lad = findLadder(P, op.zone, op.sign);
+    if (!lad) throw new Error('линейка не найдена');
+    const lines = text.split('\n'), clean = op.text.replace(/\s*\n\s*/g, ' ').replace(/\|/g, '/').trim();
+    if (lad.kind === 'v'){
+      const j = lad.lines[op.level]; if (j == null) throw new Error(`нет уровня ${op.level}`);
+      const c = cells(lines[j]); c[1] = clean; lines[j] = `| ${c.join(' | ')} |`;
+    } else {
+      const c = cells(lines[lad.line]); while (c.length <= op.level) c.push(''); c[op.level] = clean; lines[lad.line] = `| ${c.join(' | ')} |`;
+    }
+    return touchFm(lines.join('\n'), [['обновлено', op.date, 'статус']]);
+  }
+  throw new Error('неизвестная правка');
+}
+function view(path){ // текст с ещё не сохранёнными правками
+  const f = S.files.get(path); if (!f) return null;
+  let t = f.text;
+  for (const op of f.pending){ try { t = applyOp(t, op); } catch(e){} }
+  return t;
+}
+
+// ───────── GitHub ─────────
+async function gh(method, url, body, retried){
+  if (S.via === 'app' && S.token) await freshToken();
+  const r = await fetch(url.startsWith('http') ? url : API + url, {
+    method, cache: 'no-store',
+    headers: {'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28',
+      ...(S.token ? {'Authorization': `Bearer ${S.token}`} : {}), ...(body ? {'Content-Type': 'application/json'} : {})},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  // ключ входа через GitHub истёк раньше срока — продлить один раз и повторить
+  if (r.status === 401 && S.via === 'app' && !retried && LS.get('tk.refresh')){ await freshToken(true); return gh(method, url, body, true); }
+  if (!r.ok){ let msg = ''; try { msg = (await r.json()).message || ''; } catch(e){} const err = new Error(msg || `ошибка ${r.status}`); err.status = r.status; throw err; }
+  return r.status === 204 ? null : r.json();
+}
+
+// ───────── Вход через GitHub (приложение GitHub + помощник worker/vhod.js) ─────────
+// Ключ живёт 8 часов, ключ обновления — 6 месяцев: страница продлевает сама, человек входит раз в полгода.
+// Обмен кода — с PKCE и проверкой state; ключи хранятся только в этом браузере.
+const b64url = bytes => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const randomStr = n => b64url(crypto.getRandomValues(new Uint8Array(n)));
+const SS = {
+  get(k){ try { return sessionStorage.getItem(k); } catch(e){ return null; } },
+  set(k, v){ try { v == null ? sessionStorage.removeItem(k) : sessionStorage.setItem(k, v); } catch(e){} },
+};
+const backUrl = () => location.origin + location.pathname;
+
+async function appConfig(){ // есть ли помощник; ответ ждём не дольше 4 секунд
+  try {
+    const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 4000);
+    const r = await fetch(`${OAUTH}/config`, {cache: 'no-store', signal: ctl.signal}); clearTimeout(t);
+    if (!r.ok) return null;
+    const c = await r.json();
+    return c && c.client_id && c.slug ? c : null;
+  } catch(e){ return null; }
+}
+async function oauthStart(){
+  const state = randomStr(24), verifier = randomStr(48);
+  const challenge = b64url(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))));
+  SS.set('tk.oauth', JSON.stringify({state, verifier, back: backUrl()}));
+  const q = new URLSearchParams({client_id: S.app.client_id, redirect_uri: backUrl(), state, code_challenge: challenge, code_challenge_method: 'S256', allow_signup: 'true'});
+  location.href = `https://github.com/login/oauth/authorize?${q}`;
+}
+async function oauthPost(path, body){
+  const r = await fetch(`${OAUTH}/${path}`, {method: 'POST', cache: 'no-store', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+  let d = {}; try { d = await r.json(); } catch(e){}
+  if (!r.ok || !d.access_token){ const err = new Error(d.error_description || d.error || `ошибка ${r.status}`); err.code = d.error; throw err; }
+  return d;
+}
+function saveTokens(d){
+  const now = Date.now();
+  LS.set('tk.via', 'app'); LS.set('tk.token', d.access_token);
+  LS.set('tk.exp', d.expires_in ? String(now + d.expires_in * 1000) : null);       // нет срока — приложение без истечения ключей
+  if (d.refresh_token){ LS.set('tk.refresh', d.refresh_token); LS.set('tk.rexp', String(now + (d.refresh_token_expires_in || 0) * 1000)); }
+  S.token = d.access_token; S.via = 'app';
+}
+let refreshing = null;
+async function freshToken(force){
+  const exp = +LS.get('tk.exp') || 0;
+  if (!force && (!exp || exp - Date.now() > 5 * 60e3)) return; // ещё живёт больше 5 минут (или без срока)
+  const rt = LS.get('tk.refresh');
+  if (!rt) throw Object.assign(new Error('вход через GitHub устарел — войдите ещё раз'), {status: 401});
+  if (!refreshing) refreshing = oauthPost('refresh', {refresh_token: rt}).then(saveTokens).catch(e => {
+    if (!e.code) throw new Error(`нет связи с помощником входа: ${e.message}`); // сеть — вход не забываем, повторим позже
+    // GitHub отказал: ключ обновления отозван или истёк (6 месяцев) — нужен новый вход
+    forgetLogin(); throw Object.assign(new Error('вход через GitHub устарел — войдите ещё раз'), {status: 401});
+  }).finally(() => { refreshing = null; });
+  return refreshing;
+}
+function forgetLogin(){
+  for (const k of ['tk.token', 'tk.refresh', 'tk.exp', 'tk.rexp', 'tk.via']) LS.set(k, null);
+  S.token = ''; S.via = ''; S.repos = null;
+}
+// Возврат с GitHub: ?code=…&state=… (вход) или ?setup_action=install (приложение поставлено на хранилище)
+async function oauthReturn(){
+  const q = new URLSearchParams(location.search);
+  if (!q.has('code') && !q.has('setup_action') && !q.has('error')) return;
+  history.replaceState(null, '', location.pathname + '#/vhod');   // код и прочее — сразу из адреса
+  if (q.has('error')){ S.loginError = q.get('error') === 'access_denied' ? 'Вход отменён на GitHub.' : `GitHub: ${q.get('error_description') || q.get('error')}`; return; }
+  if (!q.has('code')) return;                                       // после установки приложения: просто перечитать список хранилищ
+  let saved = null; try { saved = JSON.parse(SS.get('tk.oauth') || 'null'); } catch(e){}
+  SS.set('tk.oauth', null);
+  if (!saved || saved.state !== q.get('state')){ S.loginError = 'Вход не прошёл проверку (не совпал state). Нажмите «Войти через GitHub» ещё раз.'; return; }
+  try { saveTokens(await oauthPost('token', {code: q.get('code'), code_verifier: saved.verifier, redirect_uri: saved.back})); }
+  catch(e){ S.loginError = `Не удалось войти: ${e.message}`; }
+}
+async function appRepos(){ // хранилища, на которые человек поставил приложение
+  const out = [];
+  const inst = await gh('GET', '/user/installations?per_page=100');
+  for (const i of inst.installations || []){
+    if (i.app_slug && S.app && i.app_slug !== S.app.slug) continue;
+    const r = await gh('GET', `/user/installations/${i.id}/repositories?per_page=100`);
+    for (const x of r.repositories || []) out.push({full: x.full_name, push: !x.permissions || x.permissions.push !== false});
+  }
+  return out;
+}
+const encPath = p => p.split('/').map(encodeURIComponent).join('/');
+function b64enc(str){ const b = new TextEncoder().encode(str); let s = ''; for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000)); return btoa(s); }
+function b64dec(b64){ const s = atob(b64.replace(/\s/g, '')); const b = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) b[i] = s.charCodeAt(i); return new TextDecoder().decode(b); }
+async function pool(items, n, fn){ let i = 0; await Promise.all(Array.from({length: Math.min(n, items.length)}, async () => { while (i < items.length) await fn(items[i++]); })); }
+const norm = t => t.replace(/\r\n/g, '\n');
+const wanted = p => /^10 Сферы\/\d\d [^/]+\/(Шкала\/[^/]+\.md|\d\d Шкала\.md)$/.test(p) || p === '80 Шаблоны/Шаблон — Шаг.md';
+
+async function loadLive(){
+  const info = await gh('GET', `/repos/${S.owner}/${S.repo}`);
+  S.branch = LS.get('tk.branch') || info.default_branch; // tk.branch — только для проверок на отдельной ветке
+  if (info.permissions && info.permissions.push === false) throw Object.assign(new Error('ключ не даёт права записи в это хранилище'), {status: 403});
+  const tree = await gh('GET', `/repos/${S.owner}/${S.repo}/git/trees/${encodeURIComponent(S.branch)}?recursive=1`);
+  S.paths = tree.tree.filter(x => x.type === 'blob').map(x => x.path);
+  const need = S.paths.filter(wanted);
+  if (!need.some(p => p.includes('/Шкала/'))) throw new Error('в хранилище не найдена папка «10 Сферы» с лучами — это точно копия шаблона?');
+  const sha = new Map(tree.tree.map(x => [x.path, x.sha]));
+  await pool(need, 12, async p => { // файлы по их номерам из дерева, 12 запросов одновременно
+    const r = await gh('GET', `/repos/${S.owner}/${S.repo}/git/blobs/${sha.get(p)}`);
+    S.files.set(p, {text: norm(b64dec(r.content)), sha: r.sha, pending: []});
+  });
+}
+async function loadPublic(){
+  const [o, n] = CFG.template.split('/');
+  const info = await gh('GET', `/repos/${o}/${n}`); S.branch = info.default_branch;
+  const tree = await gh('GET', `/repos/${o}/${n}/git/trees/${encodeURIComponent(S.branch)}?recursive=1`);
+  S.paths = tree.tree.filter(x => x.type === 'blob').map(x => x.path);
+  const need = S.paths.filter(wanted);
+  await Promise.all(need.map(async p => {
+    const r = await fetch(`https://raw.githubusercontent.com/${o}/${n}/${encodeURIComponent(S.branch)}/${encPath(p)}`);
+    if (r.ok) S.files.set(p, {text: norm(await r.text()), sha: null, pending: []});
+  }));
+}
+function loadEmbedded(){
+  S.paths = Object.keys(window.DEMO_FILES);
+  for (const p of S.paths) S.files.set(p, {text: norm(window.DEMO_FILES[p]), sha: null, pending: []});
+}
+async function refreshFile(path){
+  try {
+    const r = await gh('GET', `/repos/${S.owner}/${S.repo}/contents/${encPath(path)}?ref=${encodeURIComponent(S.branch)}`);
+    const f = S.files.get(path) || {pending: []};
+    S.files.set(path, {text: norm(b64dec(r.content)), sha: r.sha, pending: f.pending});
+  } catch(e){
+    if (e.status !== 404) throw e;
+    const f = S.files.get(path); if (f) S.files.set(path, {text: null, sha: null, pending: f.pending});
+  }
+}
+
+// Очередь записи: правки уходят по одной, у каждой — свой коммит
+function change(path, op, message){
+  if (!S.files.has(path)) S.files.set(path, {text: null, sha: null, pending: []});
+  if (!S.paths.includes(path)) S.paths.push(path);
+  S.files.get(path).pending.push(op);
+  rebuild();
+  if (S.mode !== 'live') return;
+  S.busy++; status();
+  S.queue = S.queue.then(async () => {
+    try {
+      for (let attempt = 0; ; attempt++){
+        const f = S.files.get(path);
+        const next = applyOp(f.text, op);
+        try {
+          const r = await gh('PUT', `/repos/${S.owner}/${S.repo}/contents/${encPath(path)}`,
+            {message, content: b64enc(next), branch: S.branch, ...(f.sha ? {sha: f.sha} : {})});
+          f.text = next; f.sha = r.content.sha; break;
+        } catch(e){
+          // файл успел измениться (например, пересчёт оценок GitHub Actions) — взять свежую версию и повторить
+          if (attempt < 3 && (e.status === 409 || (e.status === 422 && /sha/i.test(e.message)))){ await refreshFile(path); continue; }
+          throw e;
+        }
+      }
+      S.error = '';
+    } catch(e){
+      S.error = e.message; toast(`Не сохранилось: ${e.message}`);
+    } finally {
+      const f = S.files.get(path); f.pending.splice(f.pending.indexOf(op), 1);
+      if (f.text == null && !f.pending.length){ S.files.delete(path); S.paths = S.paths.filter(p => p !== path); }
+      S.busy--; rebuild(); status();
+    }
+  });
+}
+function rebuild(){ build(); render(); }
+function status(){
+  const p = document.getElementById('pill');
+  if (S.mode === 'embedded' || S.mode === 'public'){ p.className = 'pill demo'; p.textContent = 'Демо'; return; }
+  if (S.mode !== 'live'){ p.className = 'pill'; p.textContent = ''; return; }
+  if (S.busy){ p.className = 'pill busy'; p.textContent = `Сохраняю… ${S.busy}`; }
+  else if (S.error){ p.className = 'pill err'; p.textContent = 'Ошибка'; p.title = S.error; }
+  else { p.className = 'pill ok'; p.textContent = 'Сохранено'; }
+}
+window.addEventListener('beforeunload', e => { if (S.busy){ e.preventDefault(); e.returnValue = ''; } });
+
+// ───────── Рисование ─────────
+function rankClass(items){
+  const rated = items.filter(i => i.score != null);
+  if (rated.length < 2) return () => '';
+  const min = Math.min(...rated.map(i => i.score)), max = Math.max(...rated.map(i => i.score));
+  return i => i.score == null || min === max ? '' : i.score === min ? 'weak' : i.score === max ? 'strong' : '';
+}
+function wrapLabel(name){
+  const out = [''];
+  for (const w of name.split(' ')){
+    const cur = out[out.length - 1];
+    if (!cur) out[out.length - 1] = w; else if ((cur + ' ' + w).length <= 14) out[out.length - 1] = cur + ' ' + w; else out.push(w);
+  }
+  if (out.length > 2){ out.length = 2; out[1] = out[1].slice(0, 13) + '…'; }
+  return out.map(l => l.length > 16 ? l.slice(0, 15) + '…' : l);
+}
+function radar(items){ // items: {name, label, score, href}
+  if (items.length < 3) return '';
+  const W = 520, H = 420, cx = W / 2, cy = H / 2, R = 122, n = items.length;
+  const pt = (i, v) => { const a = -Math.PI / 2 + i * 2 * Math.PI / n; return [cx + Math.cos(a) * R * v / 10, cy + Math.sin(a) * R * v / 10]; };
+  let s = `<svg viewBox="-45 0 ${W + 90} ${H}" role="img" aria-label="Паутинка оценок">`;
+  for (const ring of [2, 4, 6, 8, 10]) s += `<polygon points="${items.map((_, i) => pt(i, ring).join(',')).join(' ')}" fill="none" stroke="var(--line)"/>`;
+  items.forEach((_, i) => { const [x, y] = pt(i, 10); s += `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="var(--line)"/>`; });
+  s += `<polygon points="${items.map((it, i) => pt(i, it.score ?? 0).join(',')).join(' ')}" fill="var(--accent)" fill-opacity=".18" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>`;
+  const cls = rankClass(items);
+  items.forEach((it, i) => {
+    const c = cls(it), col = c === 'weak' ? 'var(--weak)' : c === 'strong' ? 'var(--strong)' : 'var(--accent)';
+    s += `<a class="hit" href="${it.href}" aria-label="Открыть ${esc(it.name)}">`;
+    const [hx, hy] = pt(i, 11); s += `<circle cx="${hx}" cy="${hy}" r="26" fill="transparent"/>`;
+    if (it.score != null){ const [x, y] = pt(i, it.score); s += `<circle cx="${x}" cy="${y}" r="5" fill="${col}"/>`; }
+    const [lx, ly] = pt(i, 11.9), anchor = Math.abs(lx - cx) < 8 ? 'middle' : lx > cx ? 'start' : 'end';
+    const lines = wrapLabel(it.label || it.name), y0 = ly - (lines.length - 1) * 8;
+    s += `<text x="${lx}" y="${y0}" text-anchor="${anchor}" dominant-baseline="middle" font-size="15" font-family="Onest,system-ui,sans-serif" fill="${it.score == null ? 'var(--muted)' : 'var(--ink)'}">`
+      + lines.map((l, k) => `<tspan x="${lx}" dy="${k ? 17 : 0}">${esc(l)}${k === lines.length - 1 ? ` <tspan font-weight="600" fill="${it.score == null ? 'var(--muted)' : col}">${fmt(it.score)}</tspan>` : ''}</tspan>`).join('')
+      + `</text></a>`;
+  });
+  return `<div class="radar">${s}</svg></div>`;
+}
+function rows(items){ // items: {name, score, href, extra}
+  const cls = rankClass(items);
+  return `<div class="rows">` + items.map(it => `<a class="row ${cls(it)}" href="${it.href}">
+      <span class="name">${esc(it.name)}${it.extra ? `<em>${esc(it.extra)}</em>` : ''}</span>
+      <span class="bar"><i style="width:${(it.score ?? 0) * 10}%"></i></span>
+      <span class="num">${fmt(it.score)}</span><span class="arrow">›</span></a>`).join('') + `</div>`;
+}
+function chips(items){
+  const cls = rankClass(items), none = items.filter(i => i.score == null).length;
+  return `<div class="chips">${items.filter(i => cls(i) === 'weak').map(i => `<span class="chip weak">слабое: ${esc(i.name)}</span>`).join('')}${items.filter(i => cls(i) === 'strong').map(i => `<span class="chip strong">сильное: ${esc(i.name)}</span>`).join('')}${none ? `<span class="chip none">без оценки: ${none}</span>` : ''}</div>`;
+}
+function head(score, title, sub, items, label, calc){
+  return `<div class="head"><div class="big">${fmt(score)}<small>${label}</small></div>
+    <div><h1>${esc(title)}</h1><div class="sub">${sub}</div>${calc ? `<div class="calc">${esc(calc)}</div>` : ''}${items ? chips(items) : ''}</div></div>`;
+}
+const extra = (rated, total, word, score) => score == null ? (total ? `не оценено, 0 из ${total}` : 'не оценено') : (rated < total ? `оценено ${rated} из ${total} ${word}` : `${total} ${word}`);
+function wheelScore(){
+  const r = S.spheres.filter(s => s.score != null);
+  if (!r.length) return {score: null, calc: '', rated: 0};
+  const v = r.reduce((a, s) => a + s.score, 0) / r.length;
+  return {score: roundU(v), calc: `(${r.map(s => s.score).join(' + ')}) / ${r.length} = ${num(v)} → ${roundU(v)}`, rated: r.length};
+}
+function tabs(cur){
+  const w = wheelScore();
+  return `<nav class="tabs" aria-label="Сферы"><a href="#/" class="${cur == null ? 'on' : ''}">Колесо<b>${fmt(w.score)}</b></a>` +
+    S.spheres.map(s => `<a href="#/${s.nn}" class="${s.nn === cur ? 'on' : ''}">${esc(s.nn)} ${esc(s.name)}<b>${fmt(s.score)}</b></a>`).join('') + `</nav>`;
+}
+
+// Линейка нижнего уровня: нажатие на уровень открывает действия
+function ladder(o){ // o: {id, title, levels, score, key, ray, zone, sign}
+  const cur = o.score, goal = cur == null || cur >= 10 ? null : cur + 1;
+  const sel = S.ui.sel && S.ui.sel.id === o.id ? S.ui.sel.level : null;
+  const editing = S.ui.edit && S.ui.edit.id === o.id ? S.ui.edit.level : null;
+  let h = `<div class="ladder" id="L-${esc(o.id)}"><div class="lh"><h3>${esc(o.title)}</h3><span>${cur == null ? 'не оценено' : 'оценка ' + cur}</span></div>`;
+  for (let l = 10; l >= 1; l--){
+    const c = l === cur ? 'cur' : l === goal ? 'goal' : '';
+    const tag = c === 'cur' ? 'сейчас' : c === 'goal' ? 'цель' : '';
+    const text = o.levels[l] ?? '—';
+    if (editing === l){
+      h += `<div class="card" style="margin:4px"><label>Уровень ${l} — свои слова<textarea data-edit-text>${esc(text)}</textarea></label>
+        <div class="pick"><button class="btn main" data-act="saveLevel" data-id="${esc(o.id)}" data-level="${l}">Сохранить</button><button class="btn" data-act="cancel">Отмена</button></div>
+        <p class="legend">Меняется текст этого уровня в файле луча — только у вас.</p></div>`;
+      continue;
+    }
+    h += `<button class="lv ${c} ${sel === l ? 'sel' : ''}" data-act="sel" data-id="${esc(o.id)}" data-level="${l}" aria-expanded="${sel === l}"><b>${l}</b><span>${tag ? `<span class="tag">${tag}</span>` : ''}${esc(text)}</span></button>`;
+    if (sel === l){
+      h += `<div class="act">` + (l === cur
+        ? `<button class="btn danger" data-act="score" data-id="${esc(o.id)}" data-level="">Снять оценку</button>`
+        : `<button class="btn main" data-act="score" data-id="${esc(o.id)}" data-level="${l}">Моя оценка — ${l}</button>`)
+        + `<button class="btn" data-act="edit" data-id="${esc(o.id)}" data-level="${l}">Изменить уровень</button></div>`;
+    }
+  }
+  h += `</div>`;
+  if (cur != null && cur < 10) h += stepUp(o, cur);
+  return h;
+}
+function stepUp(o, cur){
+  const form = S.ui.step && S.ui.step.id === o.id;
+  let h = `<div class="step"><b class="t">Шаг вверх: ${cur} → ${cur + 1}</b><div>${esc(o.levels[cur + 1] ?? '—')}</div>`;
+  if (!form) return h + `<div><button class="btn" data-act="stepForm" data-id="${esc(o.id)}">Добавить шаг в «Путь»</button></div></div>`;
+  const st = S.ui.step;
+  const pick = (name, v) => `<div class="pick" role="group" aria-label="${name}">${[1,2,3,4,5].map(n => `<button class="btn ${v === n ? 'on' : ''}" data-act="stepPick" data-f="${name}" data-v="${n}">${n}</button>`).join('')}</div>`;
+  return h + `<label>Что сделать (название шага)<input type="text" data-step-title value="${esc(st.title)}"></label>
+    <label>Важность — насколько поднимет сферу (5 — сильнее всего)</label>${pick('важность', st.imp)}
+    <label>Простота — насколько легко сделать (5 — проще всего)</label>${pick('простота', st.easy)}
+    <div class="pick"><button class="btn main" data-act="stepSave" data-id="${esc(o.id)}">Создать шаг</button><button class="btn" data-act="cancel">Отмена</button></div></div>`;
+}
+function ladderSpec(sp, ray, zone, sign){ // объект линейки нижнего уровня для экрана
+  const leaf = sign || zone || ray, lad = leaf.lad;
+  const title = sign ? sign.name : zone ? zone.name : ray.name;
+  return {id: [sp.nn, ray.stem, zone ? zone.name : '', sign ? sign.name : ''].join('|'), title,
+    levels: lad ? lad.levels : {}, score: leaf.score, key: leaf.key, sp, ray, zone, sign, lad,
+    prose: lad && lad.sec ? lad.sec.prose.filter(l => !ray.descRaw.includes(l.trim())).join('\n').trim() : ''};
+}
+
+// ───────── Экраны ─────────
+const app = document.getElementById('app');
+let LADDERS = {};
+function route(){ return location.hash.replace(/^#\/?/, '').split('/').filter(Boolean).map(decodeURIComponent); }
+
+function render(){
+  const r = route();
+  document.getElementById('vhodLink').textContent = S.mode === 'live' ? 'Хранилище' : 'Вход';
+  if (r[0] === 'vhod' || !S.mode){ app.innerHTML = loginView(); return; }
+  if (r[0] === 'vremya'){ app.innerHTML = vremyaView(); return; }
+  LADDERS = {};
+  const sp = S.spheres.find(s => s.nn === r[0]);
+  let h;
+  if (!sp) h = wheelView();
+  else {
+    const ray = r[1] != null ? sp.rays[+r[1]] : null;
+    const zone = ray && r[2] != null ? ray.zones[+r[2]] : null;
+    h = !ray ? sphereView(sp) : !zone ? rayView(sp, ray, +r[1]) : zoneView(sp, ray, +r[1], zone, +r[2]);
+  }
+  app.innerHTML = h;
+  const on = app.querySelector('.tabs a.on'); if (on) on.parentNode.scrollLeft = on.offsetLeft - 16;
+}
+function wheelView(){
+  const w = wheelScore();
+  const items = S.spheres.map(s => ({name: `${s.nn} ${s.name}`, label: s.name, score: s.score, href: `#/${s.nn}`, extra: extra(s.rated, s.rays.length, 'лучей', s.score)}));
+  let h = (S.mode !== 'live' ? `<div class="note">Демо: так выглядит пустой шаблон. Оценки и правки здесь не сохраняются. Чтобы заполнять своё, <a href="#/vhod">войдите в своё хранилище</a>.</div>` : '');
+  h += head(w.score, 'Колесо сфер', `Среднее по ${w.rated} сферам из ${S.spheres.length}`, items, 'жизнь', w.calc);
+  h += radar(items) + rows(items);
+  const tw = S.spheres.filter(s => s.prio != null).sort((a, b) => a.prio - b.prio);
+  h += `<a class="card tw" href="#/vremya"><b>Время и внимание</b><span>${tw.length ? 'Приоритеты: ' + tw.map(s => `${s.prio} — ${esc(s.name)}`).join(', ') : 'Какие сферы двигать первыми и сколько часов в неделю на каждую'}</span><span class="arrow">›</span></a>`;
+  return h + `<p class="legend">Нажмите на сферу: откроются её лучи. Оценку ставите только внизу — на линейке уровней; всё выше страница считает сама: среднее, ,5 и меньше — вниз, больше ,5 — вверх.</p>`;
+}
+function crumbs(sp, ray, ri, zone){
+  const p = [`<a href="#/">Колесо</a>`, `<a href="#/${sp.nn}">${esc(sp.name)}</a>`];
+  if (ray) p.push(zone ? `<a href="#/${sp.nn}/${ri}">${esc(ray.name)}</a>` : `<span>${esc(ray.name)}</span>`);
+  if (zone) p.push(`<span>${esc(zone.name)}</span>`);
+  return `<nav class="crumbs">${p.join('<span>›</span>')}</nav>`;
+}
+function sphereView(sp){
+  const items = sp.rays.map((r, i) => ({name: r.name, score: r.score, href: `#/${sp.nn}/${i}`, extra: r.zones.length ? extra(r.rated, r.leaves.length, 'оценок', r.score) : (r.score == null ? 'не оценено' : '')}));
+  let h = tabs(sp.nn) + crumbs(sp) + head(sp.score, sp.name, `Среднее по ${sp.rated} лучам из ${sp.rays.length}`, items, 'сфера', sp.calc);
+  return h + radar(items) + rows(items) + `<p class="legend">Нажмите на луч: откроются его зоны или сразу линейка уровней.</p>`;
+}
+function rayView(sp, ray, ri){
+  let h = crumbs(sp, ray, ri);
+  const zi = ray.zones.map((z, i) => ({name: z.name, score: z.score, href: `#/${sp.nn}/${ri}/${i}`, extra: z.signs.length ? extra(z.signs.filter(s => s.score != null).length, z.signs.length, 'признаков', z.score) : (z.score == null ? 'не оценено' : '')}));
+  h += head(ray.score, ray.name, ray.zones.length ? `Зон: ${ray.zones.length}` : 'Одна линейка, без зон', ray.zones.length ? zi : null, 'луч', ray.calc);
+  if (ray.desc) h += `<p class="desc">${md(ray.desc).replace(/<\/?p>/g, '')}</p>`;
+  for (const p of ray.problems) h += `<div class="note err">В файле луча: ${esc(p)}</div>`;
+  if (ray.zones.length) return h + radar(zi) + rows(zi);
+  const o = ladderSpec(sp, ray, null, null); LADDERS[o.id] = o;
+  return h + (o.lad ? ladder(o) : `<div class="note">Линейки уровней в файле пока нет.</div>`) + proseBlock(o.prose);
+}
+function zoneView(sp, ray, ri, zone){
+  let h = crumbs(sp, ray, ri, zone) + head(zone.score, zone.name, `Зона луча «${esc(ray.name)}»`, zone.signs.length > 1 ? zone.signs : null, 'зона', zone.calc);
+  const list = zone.signs.length ? zone.signs.map(s => ladderSpec(sp, ray, zone, s)) : [ladderSpec(sp, ray, zone, null)];
+  const seen = new Set();
+  for (const o of list){
+    LADDERS[o.id] = o;
+    h += o.lad ? ladder(o) : `<div class="note">${esc(o.title)}: линейки уровней в файле пока нет.</div>`;
+  }
+  const prose = [zone.prose, ...list.map(o => o.prose)].filter(t => t && !seen.has(t) && seen.add(t));
+  return h + prose.map(proseBlock).join('');
+}
+// Время и внимание: важность, место и часы каждой сферы — в шапке «NN Шкала»
+const hoursFmt = v => v == null ? '' : String(v).replace('.', ',');
+function vremyaView(){
+  const sum = S.spheres.reduce((a, s) => a + (s.hours || 0), 0);
+  let h = `<nav class="crumbs"><a href="#/">Колесо</a><span>›</span><span>Время и внимание</span></nav>`;
+  h += head(sum ? hoursFmt(Math.round(sum * 10) / 10) : null, 'Время и внимание', 'Какие сферы двигать первыми и сколько часов внимания в неделю отдавать каждой', null, 'ч в неделю', '');
+  if (S.mode !== 'live') h += `<div class="note">Демо: выбор здесь не сохраняется.</div>`;
+  h += `<p class="desc"><b>Важность</b> 1–5 — насколько важно двигать сферу сейчас. <b>Место</b> — 1, 2 или 3: в приоритете не больше трёх сфер. <b>Часы</b> — блоки, когда всё внимание отдано одному делу (30, 60 или 90 минут); работа за деньги сюда не входит. Нажатие сохраняет сразу; повторное нажатие снимает выбор.</p>`;
+  for (const s of S.spheres){
+    const pick = (f, vals, cur, lbl) => `<div class="pick" role="group" aria-label="${lbl}">${vals.map(v => `<button class="btn ${cur === v ? 'on' : ''}" data-act="tw" data-nn="${s.nn}" data-f="${f}" data-v="${v}">${v}</button>`).join('')}</div>`;
+    h += `<div class="card"><div class="twh"><a href="#/${s.nn}">${esc(s.nn)} ${esc(s.name)}</a><span class="num">${fmt(s.score)}</span></div>`;
+    if (!s.hasScale){ h += `<div class="note">Нет файла «${esc(s.nn)} Шкала» — некуда записать.</div></div>`; continue; }
+    h += `<label>Важность</label>${pick('важность', [1,2,3,4,5], s.imp, 'Важность')}`
+      + `<label>Место в приоритетах</label>${pick('приоритет', [1,2,3], s.prio, 'Место')}`
+      + `<label>Часов в неделю<input type="text" inputmode="decimal" data-hours="${s.nn}" value="${hoursFmt(s.hours)}" placeholder="например, 2 или 1,5"></label></div>`;
+  }
+  return h + `<p class="legend">Сумму часов и таблицу по местам показывает и Obsidian — «Колесо баланса», вид «Время и внимание».</p>`;
+}
+function twSet(s, key, v){
+  change(s.scalePath, {type: 'fm', sets: [[key, v, 'сфера']], date: today()}, `Время и внимание: ${s.nn} ${s.name} — ${key} ${v === '' ? 'снято' : v}`);
+}
+const proseBlock = t => t ? `<details><summary>Пояснение и как мерить</summary><div class="prose">${md(t)}</div></details>` : '';
+
+function loginView(){
+  const live = S.mode === 'live';
+  const repo = LS.get('tk.repo') || '';
+  const app = S.app && S.app.ready !== false ? S.app : null;
+  let h = `<h1>${live ? 'Ваше хранилище' : 'Вход в своё хранилище'}</h1>`;
+  if (S.mode === 'embedded') h += `<div class="note">Это демо внутри Claude: вход здесь не работает. Он работает на странице заполнения (адрес помощника Cloudflare). Ниже — что увидит человек.</div>`;
+  if (S.loginError) h += `<div class="note err">${esc(S.loginError)}</div>`;
+  if (live) h += `<div class="card"><div>Открыто: <b>${esc(S.owner)}/${esc(S.repo)}</b>, ветка ${esc(S.branch)}</div>
+    <p class="legend">${S.via === 'app' ? 'Вход через GitHub: ключ продлевается сам, входить снова нужно раз в полгода.' : 'Вход по ключу доступа.'}</p>
+    <div class="pick"><a class="btn" href="#/">К колесу</a>${S.via === 'app' && S.repos && S.repos.length > 1 ? '<button class="btn" data-act="repos">Другое хранилище</button>' : ''}<button class="btn danger" data-act="logout">Выйти на этом устройстве</button></div></div>`;
+  if (app){
+    const install = `https://github.com/apps/${encodeURIComponent(app.slug)}/installations/new`;
+    if (S.via === 'app' && !live){
+      if (S.repos == null) h += `<div class="card"><p class="desc">Ищу ваши хранилища…</p></div>`;
+      else if (!S.repos.length) h += `<div class="card"><p class="desc"><b>Осталось одно:</b> поставить приложение на своё хранилище «Цифровой копии».</p>
+        <ol class="how"><li>Нажмите кнопку ниже — откроется GitHub.</li>
+        <li>Выберите <b>Only select repositories</b> (Только выбранные хранилища) и отметьте своё хранилище. Больше никакие не отмечайте.</li>
+        <li>Нажмите <b>Install</b> (Установить). GitHub вернёт вас сюда.</li></ol>
+        <div class="pick"><a class="btn main" href="${install}">Поставить на хранилище</a><button class="btn" data-act="repos">Я уже поставил — проверить</button></div></div>`;
+      else h += `<div class="card"><p class="desc">Выберите хранилище:</p><div class="pick">${S.repos.map(r => `<button class="btn${r.full === repo ? ' main' : ''}" data-act="pickRepo" data-repo="${esc(r.full)}">${esc(r.full)}</button>`).join('')}</div>
+        <p class="legend">Нет нужного? <a href="${install}">Поставьте приложение и на него</a>.</p></div>`;
+    }
+    if (S.via !== 'app') h += `<div class="card"><button class="btn main" data-act="oauth">Войти через GitHub</button>
+      <p class="legend">GitHub спросит разрешение — нажмите <b>Authorize</b> (Разрешить). В первый раз страница попросит ещё поставить приложение на ваше хранилище — это одна кнопка. Права у приложения — только файлы этого хранилища.</p>
+      ${S.mode ? '' : '<div class="pick"><button class="btn" data-act="demo">Посмотреть без входа</button></div>'}</div>`;
+  }
+  if (S.mode === 'embedded') return h;
+  let key = `<div class="card">
+    <p class="desc">Все оценки хранятся в вашем закрытом хранилище на GitHub — на любом устройстве вы увидите одно и то же. Этому браузеру нужно один раз дать разрешение писать в хранилище: ключ доступа.</p>
+    <label>Хранилище — имя или ссылка<input type="text" id="fRepo" placeholder="имя-аккаунта/имя-хранилища" value="${esc(repo)}" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
+    <label>Ключ доступа<input type="password" id="fToken" placeholder="github_pat_…" autocomplete="off"></label>
+    <div class="pick"><button class="btn main" data-act="login">Войти</button>${S.mode || app ? '' : `<button class="btn" data-act="demo">Посмотреть без входа</button>`}</div>
+    <p class="legend">Ключ хранится только в этом браузере и отправляется только на GitHub. На новом телефоне войдите ещё раз — данные не пропадут, они в хранилище.</p>
+  </div>`;
+  key += `<details ${repo || app ? '' : 'open'}><summary>Как получить ключ доступа</summary><div class="prose" style="margin-top:8px"><ol class="how">
+    <li>Откройте страницу создания ключа (войдите в GitHub, если попросит):<br><a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">https://github.com/settings/personal-access-tokens/new</a></li>
+    <li><b>Token name</b> (Название) — например «Цифровая копия».</li>
+    <li><b>Expiration</b> (Срок действия) — выберите самый долгий. Когда срок кончится, создадите новый ключ так же.</li>
+    <li><b>Repository access</b> (Доступ к хранилищам) — <b>Only select repositories</b> (Только выбранные) и выберите своё хранилище «Цифровой копии». Больше никакие не отмечайте.</li>
+    <li><b>Permissions</b> (Права) — найдите <b>Contents</b> (Содержимое) и поставьте <b>Read and write</b> (Чтение и запись). Если сначала видна кнопка <b>Add permissions</b> (Добавить права) — нажмите её и выберите Contents. Остальное не трогайте.</li>
+    <li>Внизу нажмите <b>Generate token</b> (Создать ключ), затем скопируйте ключ (начинается с <code>github_pat_</code>). GitHub показывает его один раз.</li>
+    <li>Вставьте ключ сюда, в поле «Ключ доступа», и нажмите «Войти».</li>
+  </ol></div></details>`;
+  if (app && S.via !== 'key' && !live) key = `<details><summary>Запасной способ — ключ доступа</summary><div style="margin-top:8px">${key}</div></details>`;
+  return h + (S.via === 'app' && live ? '' : key);
+}
+
+// ───────── Действия ─────────
+app.addEventListener('click', e => {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  const act = b.dataset.act, o = LADDERS[b.dataset.id];
+  if (act === 'sel'){ const l = +b.dataset.level; S.ui = {sel: S.ui.sel && S.ui.sel.id === o.id && S.ui.sel.level === l ? null : {id: o.id, level: l}}; render(); return; }
+  if (act === 'cancel'){ S.ui = {}; render(); return; }
+  if (act === 'score'){
+    const val = b.dataset.level ? +b.dataset.level : null;
+    S.ui = {};
+    change(o.ray.path, {type: 'score', key: o.key, val, date: today()},
+      `Оценка: ${o.ray.name}${o.key !== o.ray.name ? ' — ' + o.key : ''}: ${val == null ? 'снята' : val}`);
+    toast(val == null ? 'Оценка снята' : `Оценка ${val} — ${o.title}`);
+    return;
+  }
+  if (act === 'edit'){ S.ui = {edit: {id: o.id, level: +b.dataset.level}}; render(); const t = app.querySelector('[data-edit-text]'); if (t){ t.focus(); t.scrollIntoView({block: 'center'}); } return; }
+  if (act === 'saveLevel'){
+    const text = app.querySelector('[data-edit-text]').value.trim(); const l = +b.dataset.level;
+    if (!text){ toast('Пустой уровень не сохраняю'); return; }
+    S.ui = {};
+    change(o.ray.path, {type: 'level', zone: o.zone ? o.zone.name : null, sign: o.sign ? o.sign.name : null, level: l, text, date: today()},
+      `Уровень ${l}: ${o.ray.name}${o.zone ? ' — ' + o.title : ''}`);
+    toast(`Уровень ${l} изменён`); return;
+  }
+  if (act === 'stepForm'){ const cur = o.score; S.ui = {step: {id: o.id, title: `${o.title} — с ${cur} на ${cur + 1}`, imp: 3, easy: 3}}; render(); return; }
+  if (act === 'stepPick'){ const inp = app.querySelector('[data-step-title]'); if (inp) S.ui.step.title = inp.value; S.ui.step[b.dataset.f === 'важность' ? 'imp' : 'easy'] = +b.dataset.v; render(); return; }
+  if (act === 'stepSave'){ saveStep(o); return; }
+  if (act === 'tw'){
+    const s = S.spheres.find(x => x.nn === b.dataset.nn), f = b.dataset.f, v = +b.dataset.v;
+    const cur = f === 'важность' ? s.imp : s.prio, val = cur === v ? '' : v;
+    if (f === 'приоритет' && val !== ''){ const other = S.spheres.find(x => x !== s && x.prio === v); if (other) twSet(other, 'приоритет', ''); }
+    twSet(s, f, val); toast(val === '' ? `${s.name}: ${f} снято` : `${s.name}: ${f} ${val}`); return;
+  }
+  if (act === 'login'){ login(); return; }
+  if (act === 'demo'){ start('public'); return; }
+  if (act === 'logout'){ forgetLogin(); S.mode = null; S.files = new Map(); location.hash = '#/vhod'; start(null); return; }
+  if (act === 'oauth'){ if (S.mode === 'embedded'){ toast('В демо вход не работает'); return; } oauthStart(); return; }
+  if (act === 'repos'){ LS.set('tk.repo', null); S.mode = null; S.repos = null; location.hash = '#/vhod'; start(null); return; }
+  if (act === 'pickRepo'){ LS.set('tk.repo', b.dataset.repo); location.hash = '#/'; start('live'); return; }
+});
+
+app.addEventListener('change', e => {
+  const inp = e.target.closest('[data-hours]'); if (!inp) return;
+  const s = S.spheres.find(x => x.nn === inp.dataset.hours), raw = inp.value.trim().replace(',', '.');
+  const v = raw === '' ? '' : Math.round(parseFloat(raw) * 10) / 10;
+  if (v !== '' && (!isFinite(v) || v < 0 || v > 100)){ toast('Часы — число от 0 до 100'); inp.value = hoursFmt(s.hours); return; }
+  if ((v === '' ? null : v) === s.hours) return;
+  twSet(s, 'часы', v); toast(v === '' ? `${s.name}: часы сняты` : `${s.name}: ${hoursFmt(v)} ч в неделю`);
+});
+
+function saveStep(o){
+  const st = S.ui.step, title = (app.querySelector('[data-step-title]').value || '').replace(/[\\/:*?"<>|#^[\]]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 90);
+  if (!title){ toast('Напишите, что сделать'); return; }
+  const path = `${SPH_DIR}/${o.sp.dir}/Путь/${o.sp.nn} Шаг — ${title}.md`;
+  if (S.paths.includes(path)){ toast('Шаг с таким названием уже есть'); return; }
+  const d = today(), cur = o.score, where = `луч «${o.ray.name}»${o.zone ? `, зона «${o.zone.name}»` : ''}${o.sign ? `, признак «${o.sign.name}»` : ''}`;
+  let tpl = view('80 Шаблоны/Шаблон — Шаг.md') || '---\nтип: шаг\nсфера: "[[{{NN}} {{Сфера}}]]"\nлуч:\nважность:\nпростота:\nстатус:\nобновлено: {{date}}\n---\n# Название шага\n';
+  tpl = tpl.replace(/\{\{NN\}\}/g, o.sp.nn).replace(/\{\{Сфера\}\}/g, o.sp.name).replace(/\{\{date\}\}/g, d);
+  tpl = touchFm(tpl, [['луч', o.ray.name, 'сфера'], ['важность', st.imp, 'луч'], ['простота', st.easy, 'важность']]);
+  const fm = tpl.match(FM)[0];
+  const body = `# ${title}\n\n${where[0].toUpperCase() + where.slice(1)}: уровень ${cur} → ${cur + 1}.\n\n**Цель (уровень ${cur + 1}):** ${o.levels[cur + 1] ?? ''}\n\n← [[${o.ray.stem}]]\n`;
+  S.ui = {};
+  change(path, {type: 'create', content: fm + body}, `Шаг в Путь: ${title}`);
+  toast('Шаг добавлен в «Путь» сферы');
+}
+
+async function login(){
+  let repo = document.getElementById('fRepo').value.trim(), token = document.getElementById('fToken').value.trim();
+  repo = repo.replace(/^https?:\/\/github\.com\//, '').replace(/\.git$/, '').replace(/\/+$/, '').split('/').slice(0, 2).join('/');
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repo)){ toast('Хранилище: имя-аккаунта/имя-хранилища'); return; }
+  if (!token && !S.token){ toast('Вставьте ключ доступа'); return; }
+  if (token){ forgetLogin(); LS.set('tk.token', token); LS.set('tk.via', 'key'); }
+  LS.set('tk.repo', repo);
+  location.hash = '#/';
+  start('live');
+}
+
+async function start(mode){
+  S.files = new Map(); S.paths = []; S.ui = {}; S.error = '';
+  const token = LS.get('tk.token');
+  S.via = token ? (LS.get('tk.via') || 'key') : ''; S.token = token || '';
+  if (!mode && !window.DEMO_FILES && S.via === 'app'){
+    // вход через GitHub: хранилище — из списка, где стоит приложение
+    try {
+      if (S.repos == null){ render(); S.repos = await appRepos(); }
+      const saved = LS.get('tk.repo'), ok = S.repos.filter(r => r.push);
+      if (ok.length === 1) LS.set('tk.repo', ok[0].full);
+      else if (!ok.some(r => r.full === saved)) LS.set('tk.repo', null);
+      if (LS.get('tk.repo') && route()[0] === 'vhod') history.replaceState(null, '', location.pathname + '#/'); // хранилище есть — сразу к колесу
+    } catch(e){
+      if (e.status === 401){ forgetLogin(); S.loginError = 'Вход через GitHub устарел — войдите ещё раз.'; }
+      else S.loginError = `Не удалось получить список хранилищ: ${e.message}`;
+      S.repos = null;
+    }
+  }
+  const repo = LS.get('tk.repo');
+  if (!mode) mode = window.DEMO_FILES ? 'embedded' : (repo && S.token ? 'live' : null);
+  if (!mode){ S.mode = null; status(); render(); return; }
+  app.innerHTML = `<div class="center">Загружаю ${mode === 'live' ? 'ваше хранилище' : 'шаблон'}…</div>`;
+  try {
+    if (mode === 'live'){ [S.owner, S.repo] = repo.split('/'); await loadLive(); document.getElementById('brand').textContent = S.repo; S.loginError = ''; }
+    else if (mode === 'public'){ S.token = ''; await loadPublic(); }
+    else loadEmbedded();
+    S.mode = mode; build(); status();
+    if (route()[0] === 'vhod' && mode !== 'live') location.hash = '#/';
+    render();
+  } catch(e){
+    S.mode = null; status();
+    const app = S.via === 'app';
+    const why = e.status === 401 ? (app ? 'Вход через GitHub устарел — войдите ещё раз.' : 'GitHub не принял ключ: он неверный или срок кончился. Создайте новый.')
+      : e.status === 404 ? (app ? 'Хранилище не найдено, или приложение на него не поставлено.' : 'Хранилище не найдено, или ключ не даёт к нему доступа (проверьте шаг «Repository access»).')
+      : e.status === 403 ? (app ? `Нет прав: ${e.message}.` : `Нет прав: ${e.message}. Проверьте шаг «Permissions» — Contents: Read and write.`)
+      : e.message;
+    app.innerHTML = `<div class="note err">${esc(why)}</div>` + loginView();
+  }
+}
+window.addEventListener('hashchange', () => { S.ui = {}; render(); scrollTo(0, 0); });
+(async function(){
+  if (!window.DEMO_FILES){
+    const back = /[?&](code|setup_action|error)=/.test(location.search);
+    if (!back && LS.get('tk.via') !== 'app'){
+      // вход по ключу или ещё не вошли: страница грузится сразу, кнопка входа появится, когда ответит помощник
+      start();
+      S.app = await appConfig(); if (S.app && (!S.mode || route()[0] === 'vhod')) render();
+      return;
+    }
+    app.innerHTML = `<div class="center">Вхожу через GitHub…</div>`;
+    S.app = await appConfig();
+    if (back) await oauthReturn();
+    if (back && LS.get('tk.via') === 'app') location.hash = '#/';
+  } else S.app = {client_id: 'demo', slug: 'demo'};
+  start();
+})();
+</script>
+</body>
+</html>

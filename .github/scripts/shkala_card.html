@@ -1,0 +1,248 @@
+<title>Карточки Шкалы</title>
+<!-- Заготовка карточки. Данные (метка в строке «const RAW») подставляет .github/scripts/shkala.py --card; руками не заполнять. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Onest:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Карточка игрока: сверху общая цифра и паутинка, ниже строки лучей; тап — шаг вглубь (луч → зона → линейка) */
+:root{
+  --bg:#F2F4F1; --panel:#FFFFFF; --ink:#16201B; --muted:#5E6B64; --line:#D9DFDA;
+  --accent:#2C55C9; --accent-soft:#E3E9FA; --weak:#C2412D; --weak-soft:#F8E3DF;
+  --strong:#1D7F51; --strong-soft:#DDF0E6; --warn:#9A6B00; --warn-soft:#F6EBCB;
+  --display:"Unbounded","Arial Black",system-ui,sans-serif;
+  --body:"Onest",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#111613; --panel:#19201C; --ink:#E7ECE8; --muted:#97A39C; --line:#2C3530;
+  --accent:#7D9CF2; --accent-soft:#1E2846; --weak:#F0806C; --weak-soft:#3A1F1A;
+  --strong:#5BC892; --strong-soft:#173226; --warn:#E3B34A; --warn-soft:#352A12; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#111613; --panel:#19201C; --ink:#E7ECE8; --muted:#97A39C; --line:#2C3530;
+  --accent:#7D9CF2; --accent-soft:#1E2846; --weak:#F0806C; --weak-soft:#3A1F1A;
+  --strong:#5BC892; --strong-soft:#173226; --warn:#E3B34A; --warn-soft:#352A12; color-scheme:dark}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45}
+.wrap{max-width:720px;margin:0 auto;padding-inline:16px;padding-block:16px 40px;display:grid;gap:16px}
+.crumbs{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:13px;color:var(--muted)}
+.crumbs button{all:unset;cursor:pointer;color:var(--accent);font-weight:600}
+.crumbs button:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+.head{display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:center}
+.big{font-family:var(--display);font-weight:700;font-size:56px;line-height:1;font-variant-numeric:tabular-nums;
+  background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;min-width:96px;text-align:center}
+.big small{display:block;font-family:var(--body);font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-top:6px}
+h1{font-family:var(--display);font-weight:500;font-size:22px;margin:0;text-wrap:balance}
+.sub{color:var(--muted);font-size:13px;margin-top:4px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.chip{font-size:12px;font-weight:600;padding:3px 8px;border-radius:999px;white-space:nowrap}
+.chip.weak{background:var(--weak-soft);color:var(--weak)} .chip.strong{background:var(--strong-soft);color:var(--strong)}
+.chip.warn{background:var(--warn-soft);color:var(--warn)} .chip.none{background:var(--line);color:var(--muted)}
+.radar{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:8px}
+.radar svg{display:block;width:100%;height:auto;max-width:610px;margin:0 auto}
+.rows{display:grid;gap:2px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:6px}
+.row{all:unset;box-sizing:border-box;display:grid;grid-template-columns:minmax(0,1fr) 92px 40px 14px;gap:10px;align-items:center;
+  padding:10px 10px;border-radius:10px;cursor:pointer}
+.row:hover{background:var(--bg)} .row:focus-visible{outline:2px solid var(--accent)}
+.row.static{cursor:default} .row.static:hover{background:none}
+.row .name{min-width:0;font-weight:500}
+.row .name em{display:block;font-style:normal;font-size:12px;color:var(--muted);font-weight:400}
+.bar{height:8px;border-radius:4px;background:var(--line);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent);border-radius:4px}
+.row.weak .bar i{background:var(--weak)} .row.strong .bar i{background:var(--strong)}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right;font-size:15px}
+.row.weak .num{color:var(--weak)} .row.strong .num{color:var(--strong)}
+.arrow{color:var(--muted)}
+.note{font-size:13px;color:var(--warn);background:var(--warn-soft);border-radius:10px;padding:10px 12px}
+.ladder{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:6px;display:grid;gap:2px}
+.ladder h3{font-size:14px;margin:8px 10px 4px;font-weight:600}
+.lv{display:grid;grid-template-columns:34px minmax(0,1fr);gap:10px;padding:8px 10px;border-radius:10px;align-items:start}
+.lv b{font-family:var(--mono);font-weight:500;color:var(--muted);text-align:right;font-variant-numeric:tabular-nums}
+.lv.cur{background:var(--accent-soft)} .lv.cur b{color:var(--accent)}
+.lv.goal{background:var(--strong-soft)} .lv.goal b{color:var(--strong)}
+.lv .tag{display:inline-block;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;margin-right:6px}
+.lv.cur .tag{color:var(--accent)} .lv.goal .tag{color:var(--strong)}
+.radar .hit{cursor:pointer;outline:none}
+.radar .hit:hover text,.radar .hit:focus-visible text{text-decoration:underline}
+.calc{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:6px;overflow-wrap:anywhere}
+.legend{font-size:12px;color:var(--muted)}
+.tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
+.tabs button{font:500 13px var(--body);color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:6px 11px;cursor:pointer}
+.tabs button b{margin-left:6px;color:var(--muted);font-weight:600}
+.tabs button.on{background:var(--accent-soft);border-color:var(--accent)}
+.tabs button.on b{color:var(--accent)}
+@media (max-width:420px){.big{font-size:44px;min-width:80px}.row{grid-template-columns:minmax(0,1fr) 56px 34px 12px}}
+@media (prefers-reduced-motion:no-preference){.bar i{transition:width .4s ease}}
+</style>
+
+<div class="wrap" id="app"></div>
+
+<script>
+const RAW = __DATA__;
+// Верхний этаж — колесо всех сфер (si = -1); ниже — паутинка сферы → зоны луча → линейка. Переключатель сфер сверху
+RAW.spheres.forEach(s => s.date = RAW.built);
+let si = -1;
+let DATA = null;
+const app = document.getElementById('app');
+let path = []; // [rayIdx, zoneIdx]
+
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmt = v => v == null ? '—' : String(v).replace('.', ',');
+const hasLevels = o => o.levels && Object.keys(o.levels).length;
+
+function rankClass(items){
+  const rated = items.filter(i => i.score != null);
+  if (rated.length < 2) return () => '';
+  const min = Math.min(...rated.map(i => i.score)), max = Math.max(...rated.map(i => i.score));
+  return i => i.score == null || min === max ? '' : i.score === min ? 'weak' : i.score === max ? 'strong' : '';
+}
+
+// Правило округления пользователя: дробная часть до ,5 включительно — вниз, больше ,5 — вверх
+const roundU = v => { const f = Math.floor(v); return v - f > 0.5 + 1e-9 ? f + 1 : f; };
+// Подпись на паутинке: до двух строк по ~14 знаков
+function wrap(name){
+  const words = name.split(' '), out = [''];
+  for (const w of words){
+    const cur = out[out.length-1];
+    if (!cur) out[out.length-1] = w;
+    else if ((cur + ' ' + w).length <= 14) out[out.length-1] = cur + ' ' + w;
+    else out.push(w);
+  }
+  if (out.length > 2){ out.length = 2; out[1] = out[1].slice(0, 13) + '…'; }
+  return out.map(l => l.length > 16 ? l.slice(0, 15) + '…' : l);
+}
+
+function radar(items, tappable){
+  if (items.length < 3) return '';
+  const W = 520, H = 420, cx = W/2, cy = H/2, R = 122, n = items.length;
+  const pt = (i, v) => { const a = -Math.PI/2 + i*2*Math.PI/n; return [cx + Math.cos(a)*R*v/10, cy + Math.sin(a)*R*v/10]; };
+  let s = `<svg viewBox="-45 0 ${W + 90} ${H}" role="img" aria-label="Паутинка оценок">`;
+  for (const ring of [2,4,6,8,10]){
+    const p = items.map((_,i) => pt(i, ring).join(',')).join(' ');
+    s += `<polygon points="${p}" fill="none" stroke="var(--line)" stroke-width="1"/>`;
+  }
+  items.forEach((it,i) => { const [x,y] = pt(i,10); s += `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="var(--line)"/>`; });
+  const shape = items.map((it,i) => pt(i, it.score ?? 0).join(',')).join(' ');
+  s += `<polygon points="${shape}" fill="var(--accent)" fill-opacity=".18" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>`;
+  const cls = rankClass(items);
+  items.forEach((it,i) => {
+    const c = cls(it), col = c==='weak' ? 'var(--weak)' : c==='strong' ? 'var(--strong)' : 'var(--accent)';
+    const deeper = tappable && canOpen(it);
+    s += deeper ? `<g class="hit" data-i="${i}" tabindex="0" role="button" aria-label="Открыть ${esc(it.name)}">` : '<g>';
+    if (deeper){ const [hx,hy] = pt(i, 11); s += `<circle cx="${hx}" cy="${hy}" r="26" fill="transparent"/>`; }
+    if (it.score != null){ const [x,y] = pt(i, it.score); s += `<circle cx="${x}" cy="${y}" r="5" fill="${col}"/>`; }
+    const [lx,ly] = pt(i, 11.9); const anchor = Math.abs(lx-cx) < 8 ? 'middle' : lx > cx ? 'start' : 'end';
+    const lines = wrap(it.label || it.name), y0 = ly - (lines.length - 1) * 8;
+    s += `<text x="${lx}" y="${y0}" text-anchor="${anchor}" dominant-baseline="middle" font-size="15" font-family="Onest,system-ui,sans-serif" fill="${it.score==null ? 'var(--muted)' : 'var(--ink)'}">`
+      + lines.map((l, k) => `<tspan x="${lx}" dy="${k ? 17 : 0}">${esc(l)}${k === lines.length - 1 ? ` <tspan font-weight="600" fill="${it.score==null?'var(--muted)':col}">${fmt(it.score)}</tspan>` : ''}</tspan>`).join('')
+      + `</text></g>`;
+  });
+  return `<div class="radar">${s}</svg></div>`;
+}
+
+function canOpen(it){ return !!((it.rays && it.rays.length) || (it.zones && it.zones.length) || (it.signs && it.signs.length) || hasLevels(it)); }
+function rows(items, onTap){
+  const cls = rankClass(items);
+  return `<div class="rows">` + items.map((it,i) => {
+    const deeper = onTap && canOpen(it);
+    const rn = (it.rays || []).length, zn = (it.zones || []).length, sn = (it.signs || []).length;
+    const list = rn ? it.rays : zn ? it.zones : it.signs || [];
+    const rated = list.filter(x => x.score != null).length;
+    const total = rn || zn || sn, word = rn ? 'лучей' : zn ? 'зон' : 'признаков';
+    const extra = it.score == null ? (total ? `не оценено, 0 из ${total}` : 'не оценено')
+      : total ? (rated < total ? `оценено ${rated} из ${total} ${word}` : `${total} ${word}`) : '';
+    const tag = deeper ? 'button' : 'div';
+    return `<${tag} class="row ${cls(it)} ${deeper?'':'static'}" ${deeper?`data-i="${i}"`:''}>
+      <span class="name">${esc(it.name)}${extra?`<em>${esc(extra)}</em>`:''}</span>
+      <span class="bar"><i style="width:${(it.score ?? 0)*10}%"></i></span>
+      <span class="num">${fmt(it.score)}</span><span class="arrow">${deeper?'›':''}</span></${tag}>`;
+  }).join('') + `</div>`;
+}
+
+function ladder(title, levels, score){
+  const cur = score == null ? null : Math.floor(score);
+  const goal = cur == null ? null : Math.min(cur + 1, 10);
+  let s = `<div class="ladder">${title?`<h3>${esc(title)}</h3>`:''}`;
+  for (let l = 10; l >= 1; l--){
+    const c = l === cur ? 'cur' : (l === goal && goal !== cur) ? 'goal' : '';
+    const tag = c === 'cur' ? 'сейчас' : c === 'goal' ? 'цель' : '';
+    s += `<div class="lv ${c}"><b>${l}</b><span>${tag?`<span class="tag">${tag}</span>`:''}${esc(levels[l] ?? levels[String(l)] ?? '—')}</span></div>`;
+  }
+  return s + `</div>`;
+}
+
+function chips(items){
+  const rated = items.filter(i => i.score != null), cls = rankClass(items);
+  const w = rated.filter(i => cls(i)==='weak').map(i=>i.name), st = rated.filter(i => cls(i)==='strong').map(i=>i.name);
+  const none = items.filter(i => i.score == null).map(i=>i.name);
+  return `<div class="chips">${w.map(n=>`<span class="chip weak">слабое: ${esc(n)}</span>`).join('')}${st.map(n=>`<span class="chip strong">сильное: ${esc(n)}</span>`).join('')}${none.length?`<span class="chip none">без оценки: ${none.length}</span>`:''}</div>`;
+}
+
+function crumbs(){
+  const parts = [`<button data-s="-1">Колесо</button><span>›</span><button data-go="0">${esc(DATA.sphere)}</button>`];
+  if (path.length >= 1) parts.push(`<span>›</span><button data-go="1">${esc(DATA.rays[path[0]].name)}</button>`);
+  if (path.length >= 2) parts.push(`<span>›</span><span>${esc(DATA.rays[path[0]].zones[path[1]].name)}</span>`);
+  return `<nav class="crumbs">${parts.join('')}</nav>`;
+}
+
+function head(score, title, sub, items, label, calc){
+  return `<div class="head"><div class="big">${fmt(score)}<small>${label}</small></div>
+    <div><h1>${esc(title)}</h1><div class="sub">${sub}</div>${calc?`<div class="calc">${esc(calc)}</div>`:''}${items ? chips(items) : ''}</div></div>`;
+}
+
+function tabs(){
+  if (RAW.spheres.length < 2) return '';
+  return `<nav class="tabs" aria-label="Сферы"><button data-s="-1" class="${si<0?'on':''}" ${si<0?'aria-current="true"':''}>Колесо<b>${fmt(wheelScore().score)}</b></button>` + RAW.spheres.map((s,i) => `<button data-s="${i}" class="${i===si?'on':''}" ${i===si?'aria-current="true"':''}>${esc(s.nn)} ${esc(s.sphere)}<b>${fmt(s.score)}</b></button>`).join('') + `</nav>`;
+}
+
+function wheelScore(){
+  const r = RAW.spheres.filter(s => s.score != null);
+  if (!r.length) return {score: null, calc: ''};
+  const sum = r.reduce((a, s) => a + s.score, 0), v = sum / r.length, out = roundU(v);
+  const vs = String(Math.round(v * 100) / 100).replace('.', ',');
+  return {score: out, calc: `(${r.map(s => s.score).join(' + ')}) / ${r.length} = ${vs} → ${out}`, rated: r.length};
+}
+function wheel(){
+  const items = RAW.spheres.map(s => ({name: `${s.nn} ${s.sphere}`, label: s.sphere, score: s.score, rays: s.rays}));
+  const w = wheelScore();
+  let h = tabs();
+  h += head(w.score, 'Колесо сфер', `Среднее по ${w.rated || 0} сферам из ${RAW.spheres.length} · данные на ${RAW.built.split('-').reverse().join('.')}`, items, 'жизнь', w.calc);
+  h += radar(items, true) + rows(items, true);
+  h += `<p class="legend">Нажмите на сферу на колесе или в списке: откроется паутинка её лучей. Оценка сферы — среднее её лучей; общая цифра — среднее сфер; ,5 и меньше округляется вниз, больше ,5 — вверх.</p>`;
+  return h;
+}
+function goSphere(i){ si = i; DATA = i < 0 ? null : RAW.spheres[i]; path = []; render(); scrollTo(0,0); }
+
+function render(){
+  if (si < 0){ app.innerHTML = wheel(); bind(); return; }
+  let h = (path.length === 0 ? tabs() : '') + crumbs();
+  if (path.length === 0){
+    h += head(DATA.score, DATA.sphere, `Среднее по ${DATA.rated} лучам из ${DATA.rays.length} · данные на ${DATA.date.split('-').reverse().join('.')}`, DATA.rays, 'сфера', DATA.calc);
+    h += radar(DATA.rays, true) + rows(DATA.rays, true);
+    h += `<p class="legend">Нажмите на луч на паутинке или в списке: откроются его зоны и линейка уровней. Оценка ставится только внизу (признак, зона или луч без зон), выше — среднее; нет оценки — не учитывается; ,5 и меньше округляется вниз, больше ,5 — вверх.</p>`;
+  } else if (path.length === 1){
+    const r = DATA.rays[path[0]];
+    const z = r.zones || [];
+    h += head(r.score, r.name, z.length ? `Зон: ${z.length}` : 'Одна линейка, без зон', z.length ? z : null, 'луч', r.calc);
+    if (r.note) h += `<div class="note">${esc(r.note)}</div>`;
+    if (z.length){ h += radar(z, true) + rows(z, true); }
+    else if (hasLevels(r)) h += ladder('', r.levels, r.score);
+  } else {
+    const r = DATA.rays[path[0]], z = r.zones[path[1]];
+    h += head(z.score, z.name, `Зона луча «${esc(r.name)}»`, z.signs.length > 1 ? z.signs : null, 'зона', z.calc);
+    if (z.note) h += `<div class="note">${esc(z.note)}</div>`;
+    if (!z.signs.length && hasLevels(z)) h += ladder('', z.levels, z.score);
+    for (const sg of z.signs) if (hasLevels(sg)) h += ladder(`${sg.name}${sg.score!=null?' — '+fmt(sg.score):''}`, sg.levels, sg.score);
+    if (!hasLevels(z) && !z.signs.some(s => hasLevels(s))) h += `<div class="note">Линейки уровней в файле пока нет.</div>`;
+  }
+  app.innerHTML = h;
+  bind();
+}
+function bind(){
+  app.querySelectorAll('[data-s]').forEach(b => b.onclick = () => goSphere(+b.dataset.s));
+  app.querySelectorAll('[data-go]').forEach(b => b.onclick = () => { path = path.slice(0, +b.dataset.go); render(); scrollTo(0,0); });
+  const open = i => { if (si < 0) return goSphere(i); path = [...path, i]; render(); scrollTo(0,0); };
+  app.querySelectorAll('.row[data-i], .hit[data-i]').forEach(b => {
+    b.addEventListener('click', () => open(+b.dataset.i));
+    b.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(+b.dataset.i); } });
+  });
+}
+render();
+</script>

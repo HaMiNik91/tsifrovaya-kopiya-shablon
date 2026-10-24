@@ -1,0 +1,49 @@
+# Пересчёт оценок Шкалы (CLAUDE.md, п. 5.3).
+# После каждого коммита в main с правкой файлов сфер программа shkala.py пересчитывает оценки
+# (признаки → зона → луч → сфера) и, если что-то изменилось, сама записывает их в шапки отдельным коммитом.
+# Заодно medkarta.py пересчитывает Медкарту (CLAUDE.md, п. 5.2): проценты карты тела, сроки обследований, расчёт замеров.
+# В запросе на слияние (Pull Request) только проверяет форму. Красная проверка — ошибка формы оценок, список в журнале.
+name: Пересчёт оценок Шкалы и Медкарты
+
+on:
+  push:
+    branches: [main]
+    paths: ["10 Сферы/**", "00 Старт/Колесо баланса.md", ".github/scripts/shkala.py"]
+  pull_request:
+    paths: ["10 Сферы/**", "00 Старт/Колесо баланса.md", ".github/scripts/shkala.py"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Нажатия на странице заполнения дают коммит за коммитом: пересчёты идут по очереди, а не наперегонки
+concurrency:
+  group: shkala-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  shkala:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.sha || github.ref_name }}  # самая свежая версия ветки, а не та, что запустила пересчёт
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Проверка формы (запрос на слияние)
+        if: github.event_name == 'pull_request'
+        run: |
+          python3 .github/scripts/shkala.py
+          python3 .github/scripts/medkarta.py
+      - name: Пересчитать и записать оценки
+        if: github.event_name != 'pull_request'
+        run: |
+          python3 .github/scripts/shkala.py --write
+          python3 .github/scripts/medkarta.py --write
+          if [ -n "$(git status --porcelain)" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -am "Пересчёт оценок Шкалы и Медкарты (shkala.py, medkarta.py)"
+            for i in 1 2 3; do git pull --rebase -q && git push && break; sleep 5; done
+          fi

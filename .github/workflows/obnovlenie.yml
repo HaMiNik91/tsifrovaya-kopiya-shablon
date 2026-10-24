@@ -1,0 +1,60 @@
+# Обновление копии из общего шаблона (CLAUDE.md, раздел 12).
+# Запуск — кнопкой: вкладка Actions (Действия) → «Обновить из шаблона» → Run workflow (Запустить).
+# Режим «обновить» переносит новое из шаблона и сразу пересчитывает оценки; «проверить» — только отчёт.
+# Отчёт — в итоге запуска (Summary) и в файле «00 Старт/Обновления из шаблона.md».
+# Своё (оценки, правки уровней, записи, журнал, люди) не теряется — правила внутри obnovlenie.py.
+# Программы-расписания (.github/workflows) встроенный ключ GitHub менять не может: их обновляет Claude
+# той же программой, отчёт об этом напишет.
+name: Обновить из шаблона
+
+on:
+  workflow_dispatch:
+    inputs:
+      rezhim:
+        description: "Что сделать"
+        type: choice
+        options: ["обновить", "проверить"]
+        default: "обновить"
+
+permissions:
+  contents: write
+
+# В одной очереди с пересчётом оценок: не наперегонки с нажатиями на странице
+concurrency:
+  group: shkala-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  obnovlenie:
+    if: github.repository != 'HaMiNik91/tsifrovaya-kopiya-shablon'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # вся история: по первому коммиту программа узнаёт версию шаблона
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Обновить из шаблона
+        env:
+          SHABLON_TOKEN: ${{ secrets.SHABLON_TOKEN }}  # нужен, только пока шаблон закрыт
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          flag=""
+          if [ "${{ inputs.rezhim }}" = "проверить" ]; then flag="--proverit"; fi
+          set +e
+          python3 .github/scripts/obnovlenie.py --bez-workflows --otchet "$GITHUB_STEP_SUMMARY" $flag
+          rc=$?
+          set -e
+          if [ $rc -eq 3 ]; then echo "Копия уже обновлена до последней версии шаблона." >> "$GITHUB_STEP_SUMMARY"; exit 0; fi
+          if [ $rc -ne 0 ]; then exit $rc; fi
+          if [ -n "$flag" ]; then exit 0; fi
+          python3 .github/scripts/shkala.py --write
+          python3 .github/scripts/medkarta.py --write
+          python3 .github/scripts/check_links.py || echo "⚠ Есть битые ссылки — список выше; попросите Claude поправить." >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "$(git status --porcelain)" ]; then
+            git add -A
+            git commit -q -m "Обновление из шаблона (obnovlenie.py)" -m "Отчёт — «00 Старт/Обновления из шаблона.md»."
+            for i in 1 2 3; do git pull --rebase -q && git push && break; sleep 5; done
+          fi

@@ -1,0 +1,21 @@
+# Проверка битых ссылок после каждого изменения (CLAUDE.md, раздел 3).
+# Запускается сама при каждом коммите в main и при каждом запросе на слияние (Pull Request).
+# Если есть битые ссылки — проверка красная, список ссылок виден в журнале проверки.
+name: Проверка ссылок
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check-links:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Битые ссылки
+        run: python3 .github/scripts/check_links.py
