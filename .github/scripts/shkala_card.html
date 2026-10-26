@@ -8,6 +8,7 @@
   --bg:#F2F4F1; --panel:#FFFFFF; --ink:#16201B; --muted:#5E6B64; --line:#D9DFDA;
   --accent:#2C55C9; --accent-soft:#E3E9FA; --weak:#C2412D; --weak-soft:#F8E3DF;
   --strong:#1D7F51; --strong-soft:#DDF0E6; --warn:#9A6B00; --warn-soft:#F6EBCB;
+  --low:#B58900; --low-soft:#FBF0C9;
   --display:"Unbounded","Arial Black",system-ui,sans-serif;
   --body:"Onest",system-ui,-apple-system,"Segoe UI",sans-serif;
   --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
@@ -15,11 +16,13 @@
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --bg:#111613; --panel:#19201C; --ink:#E7ECE8; --muted:#97A39C; --line:#2C3530;
   --accent:#7D9CF2; --accent-soft:#1E2846; --weak:#F0806C; --weak-soft:#3A1F1A;
-  --strong:#5BC892; --strong-soft:#173226; --warn:#E3B34A; --warn-soft:#352A12; color-scheme:dark}}
+  --strong:#5BC892; --strong-soft:#173226; --warn:#E3B34A; --warn-soft:#352A12;
+  --low:#F2CC4E; --low-soft:#3A3212; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#111613; --panel:#19201C; --ink:#E7ECE8; --muted:#97A39C; --line:#2C3530;
   --accent:#7D9CF2; --accent-soft:#1E2846; --weak:#F0806C; --weak-soft:#3A1F1A;
-  --strong:#5BC892; --strong-soft:#173226; --warn:#E3B34A; --warn-soft:#352A12; color-scheme:dark}
+  --strong:#5BC892; --strong-soft:#173226; --warn:#E3B34A; --warn-soft:#352A12;
+  --low:#F2CC4E; --low-soft:#3A3212; color-scheme:dark}
 body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45}
 .wrap{max-width:720px;margin:0 auto;padding-inline:16px;padding-block:16px 40px;display:grid;gap:16px}
 .crumbs{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:13px;color:var(--muted)}
@@ -33,7 +36,7 @@ h1{font-family:var(--display);font-weight:500;font-size:22px;margin:0;text-wrap:
 .sub{color:var(--muted);font-size:13px;margin-top:4px}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .chip{font-size:12px;font-weight:600;padding:3px 8px;border-radius:999px;white-space:nowrap}
-.chip.weak{background:var(--weak-soft);color:var(--weak)} .chip.strong{background:var(--strong-soft);color:var(--strong)}
+.chip.weak{background:var(--weak-soft);color:var(--weak)} .chip.low{background:var(--low-soft);color:var(--low)} .chip.strong{background:var(--strong-soft);color:var(--strong)}
 .chip.warn{background:var(--warn-soft);color:var(--warn)} .chip.none{background:var(--line);color:var(--muted)}
 .radar{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:8px}
 .radar svg{display:block;width:100%;height:auto;max-width:610px;margin:0 auto}
@@ -46,9 +49,9 @@ h1{font-family:var(--display);font-weight:500;font-size:22px;margin:0;text-wrap:
 .row .name em{display:block;font-style:normal;font-size:12px;color:var(--muted);font-weight:400}
 .bar{height:8px;border-radius:4px;background:var(--line);overflow:hidden}
 .bar i{display:block;height:100%;background:var(--accent);border-radius:4px}
-.row.weak .bar i{background:var(--weak)} .row.strong .bar i{background:var(--strong)}
+.row.weak .bar i{background:var(--weak)} .row.low .bar i{background:var(--low)} .row.strong .bar i{background:var(--strong)}
 .num{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right;font-size:15px}
-.row.weak .num{color:var(--weak)} .row.strong .num{color:var(--strong)}
+.row.weak .num{color:var(--weak)} .row.low .num{color:var(--low)} .row.strong .num{color:var(--strong)}
 .arrow{color:var(--muted)}
 .note{font-size:13px;color:var(--warn);background:var(--warn-soft);border-radius:10px;padding:10px 12px}
 .ladder{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:6px;display:grid;gap:2px}
@@ -91,7 +94,9 @@ function rankClass(items){
   const rated = items.filter(i => i.score != null);
   if (rated.length < 2) return () => '';
   const min = Math.min(...rated.map(i => i.score)), max = Math.max(...rated.map(i => i.score));
-  return i => i.score == null || min === max ? '' : i.score === min ? 'weak' : i.score === max ? 'strong' : '';
+  // Самое низкое: 5 и ниже — красное (weak), 6 и выше — жёлтое (low)
+  const lowCls = min <= 5 ? 'weak' : 'low';
+  return i => i.score == null || min === max ? '' : i.score === min ? lowCls : i.score === max ? 'strong' : '';
 }
 
 // Правило округления пользователя: дробная часть до ,5 включительно — вниз, больше ,5 — вверх
@@ -123,7 +128,7 @@ function radar(items, tappable){
   s += `<polygon points="${shape}" fill="var(--accent)" fill-opacity=".18" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>`;
   const cls = rankClass(items);
   items.forEach((it,i) => {
-    const c = cls(it), col = c==='weak' ? 'var(--weak)' : c==='strong' ? 'var(--strong)' : 'var(--accent)';
+    const c = cls(it), col = c==='weak' ? 'var(--weak)' : c==='low' ? 'var(--low)' : c==='strong' ? 'var(--strong)' : 'var(--accent)';
     const deeper = tappable && canOpen(it);
     s += deeper ? `<g class="hit" data-i="${i}" tabindex="0" role="button" aria-label="Открыть ${esc(it.name)}">` : '<g>';
     if (deeper){ const [hx,hy] = pt(i, 11); s += `<circle cx="${hx}" cy="${hy}" r="26" fill="transparent"/>`; }
@@ -170,9 +175,9 @@ function ladder(title, levels, score){
 
 function chips(items){
   const rated = items.filter(i => i.score != null), cls = rankClass(items);
-  const w = rated.filter(i => cls(i)==='weak').map(i=>i.name), st = rated.filter(i => cls(i)==='strong').map(i=>i.name);
+  const w = rated.filter(i => cls(i)==='weak').map(i=>i.name), lo = rated.filter(i => cls(i)==='low').map(i=>i.name), st = rated.filter(i => cls(i)==='strong').map(i=>i.name);
   const none = items.filter(i => i.score == null).map(i=>i.name);
-  return `<div class="chips">${w.map(n=>`<span class="chip weak">слабое: ${esc(n)}</span>`).join('')}${st.map(n=>`<span class="chip strong">сильное: ${esc(n)}</span>`).join('')}${none.length?`<span class="chip none">без оценки: ${none.length}</span>`:''}</div>`;
+  return `<div class="chips">${w.map(n=>`<span class="chip weak">слабое: ${esc(n)}</span>`).join('')}${lo.map(n=>`<span class="chip low">ниже других: ${esc(n)}</span>`).join('')}${st.map(n=>`<span class="chip strong">сильное: ${esc(n)}</span>`).join('')}${none.length?`<span class="chip none">без оценки: ${none.length}</span>`:''}</div>`;
 }
 
 function crumbs(){
