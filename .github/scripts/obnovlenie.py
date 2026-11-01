@@ -412,7 +412,13 @@ def kod_fayla(sh, rev, path):
 def po_kodam(sh, ot, do, res):
     """Удалённый и добавленный файл с одним `код` — это переименование (луч или сфера сменили имя),
     даже если текст изменился так сильно, что git этого не узнал."""
-    udal = {kod_fayla(sh, ot, old): (i, old) for i, (st, old, _) in enumerate(res) if st == "D"}
+    def kod_udalennogo(old):
+        k = kod_fayla(sh, ot, old)
+        if k is None:  # в «было» кода ещё не было: берём код из версии перед удалением файла
+            c = sh.g("log", "--diff-filter=D", "-1", "--format=%H", f"{ot}..{do}", "--", old, check=False).stdout.strip()
+            k = kod_fayla(sh, f"{c}^", old) if c else None
+        return k
+    udal = {kod_udalennogo(old): (i, old) for i, (st, old, _) in enumerate(res) if st == "D"}
     udal.pop(None, None)
     para, lishnie = {}, set()
     for i, (st, _, new) in enumerate(res):
