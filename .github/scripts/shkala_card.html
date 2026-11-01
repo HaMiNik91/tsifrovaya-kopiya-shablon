@@ -1,5 +1,7 @@
 <title>Карточки Шкалы</title>
-<!-- Заготовка карточки. Данные (метка в строке «const RAW») подставляет .github/scripts/shkala.py --card; руками не заполнять. -->
+<!-- Заготовка карточки. Данные (метка в строке «const RAW») подставляет .github/scripts/shkala.py --card; руками не заполнять.
+     Нажатие уровня на линейке пишет выбор в базу страницы (коллекция «vybor», capability db); в хранилище его переносит
+     Claude: ArtifactData list → shkala.py --perenos → --write → новая сборка карточки → удалить перенесённые документы. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Onest:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
 <style>
@@ -36,8 +38,8 @@ h1{font-family:var(--display);font-weight:500;font-size:22px;margin:0;text-wrap:
 .sub{color:var(--muted);font-size:13px;margin-top:4px}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .chip{font-size:12px;font-weight:600;padding:3px 8px;border-radius:999px;white-space:nowrap}
-.chip.weak{background:var(--weak-soft);color:var(--weak)} .chip.low{background:var(--low-soft);color:var(--low)} .chip.strong{background:var(--strong-soft);color:var(--strong)}
-.chip.warn{background:var(--warn-soft);color:var(--warn)} .chip.none{background:var(--line);color:var(--muted)}
+.chip.weak{background:var(--weak-soft);color:var(--weak)} .chip.strong{background:var(--strong-soft);color:var(--strong)}
+.chip.low{background:var(--low-soft);color:var(--low)} .chip.warn{background:var(--warn-soft);color:var(--warn)} .chip.none{background:var(--line);color:var(--muted)}
 .radar{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:8px}
 .radar svg{display:block;width:100%;height:auto;max-width:610px;margin:0 auto}
 .rows{display:grid;gap:2px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:6px}
@@ -62,6 +64,25 @@ h1{font-family:var(--display);font-weight:500;font-size:22px;margin:0;text-wrap:
 .lv.goal{background:var(--strong-soft)} .lv.goal b{color:var(--strong)}
 .lv .tag{display:inline-block;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;margin-right:6px}
 .lv.cur .tag{color:var(--accent)} .lv.goal .tag{color:var(--strong)}
+button.lv{all:unset;box-sizing:border-box;display:grid;grid-template-columns:34px minmax(0,1fr);gap:10px;padding:8px 10px;border-radius:10px;align-items:start;cursor:pointer}
+button.lv:hover{background:var(--bg)} button.lv:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+button.lv.cur:hover{background:var(--accent-soft)} button.lv.goal:hover{background:var(--strong-soft)}
+.lv.new{background:var(--warn-soft)} .lv.new b,.lv.new .tag{color:var(--warn)}
+button.lv.new:hover{background:var(--warn-soft)}
+.lv.was b{text-decoration:line-through}
+.picks{display:flex;flex-wrap:wrap;gap:8px;padding:6px 10px 8px}
+.picks button{font:600 13px var(--body);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:6px 12px;cursor:pointer}
+.picks button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.pending{background:var(--warn-soft);color:var(--ink);border-radius:12px;padding:10px 12px;font-size:13px;display:grid;gap:4px}
+.pending b{color:var(--warn)} .pending summary{cursor:pointer;color:var(--warn);font-weight:600}
+.pending ul{margin:4px 0 0;padding-left:18px}
+.unit{font-size:13px;color:var(--muted);margin:2px 10px 6px}
+.unit b{color:var(--ink);font-weight:600}
+.notes{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 14px;display:grid;gap:8px;font-size:14px}
+.notes p{margin:0;min-width:0;overflow-wrap:anywhere}
+.notes b{font-weight:600}
+.status{font-size:13px;color:var(--muted);min-height:1.2em}
+.status.err{color:var(--weak)}
 .radar .hit{cursor:pointer;outline:none}
 .radar .hit:hover text,.radar .hit:focus-visible text{text-decoration:underline}
 .calc{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:6px;overflow-wrap:anywhere}
@@ -81,6 +102,7 @@ h1{font-family:var(--display);font-weight:500;font-size:22px;margin:0;text-wrap:
 const RAW = __DATA__;
 // Верхний этаж — колесо всех сфер (si = -1); ниже — паутинка сферы → зоны луча → линейка. Переключатель сфер сверху
 RAW.spheres.forEach(s => s.date = RAW.built);
+const BASE = JSON.stringify(RAW);   // оценки из хранилища — до выбора на карточке
 let si = -1;
 let DATA = null;
 const app = document.getElementById('app');
@@ -94,7 +116,7 @@ function rankClass(items){
   const rated = items.filter(i => i.score != null);
   if (rated.length < 2) return () => '';
   const min = Math.min(...rated.map(i => i.score)), max = Math.max(...rated.map(i => i.score));
-  // Самое низкое: 5 и ниже — красное (weak), 6 и выше — жёлтое (low)
+  // Самое низкое: 5 и ниже — красное (weak), 6 и выше — жёлтое (low) — решение пользователя 25.10.2026
   const lowCls = min <= 5 ? 'weak' : 'low';
   return i => i.score == null || min === max ? '' : i.score === min ? lowCls : i.score === max ? 'strong' : '';
 }
@@ -161,15 +183,34 @@ function rows(items, onTap){
   }).join('') + `</div>`;
 }
 
-function ladder(title, levels, score){
+// leaf — нижний элемент, который оценивается нажатием: {file, stroka}; без leaf линейка только для чтения
+// Подпись числовой линейки «Задержка дыхания, с» → «Задержка дыхания — в секундах»; к цифрам уровней — единица
+const UNITS = {'с': ['в секундах', 'с'], 'сек': ['в секундах', 'с'], 'мин': ['в минутах', 'мин'], 'см': ['в сантиметрах', 'см'], 'м': ['в метрах', 'м'],
+  'км': ['в километрах', 'км'], 'кг': ['в килограммах', 'кг'], 'раз': ['сколько раз', 'раз'], '%': ['в процентах', '%'], 'ч': ['в часах', 'ч']};
+function unitOf(label){
+  if (!label) return null;
+  const m = label.match(/^(.*?),\s*([^,]+)$/), u = m && UNITS[m[2].trim().toLowerCase()];
+  return u ? {name: m[1].trim(), how: u[0], short: u[1]} : {name: label, how: '', short: ''};
+}
+const md = t => esc(t).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, '$2').replace(/\[\[([^\]]+)\]\]/g, '$1');
+function notes(item){ return item && item.text && item.text.length ? `<div class="notes">${item.text.map(t => `<p>${md(t)}</p>`).join('')}</div>` : ''; }
+function ladder(title, levels, score, leaf, unitLabel){
   const cur = score == null ? null : Math.floor(score);
   const goal = cur == null ? null : Math.min(cur + 1, 10);
-  let s = `<div class="ladder">${title?`<h3>${esc(title)}</h3>`:''}`;
+  const k = leaf && canPick() ? keyOf(leaf.file, leaf.stroka) : null;
+  const o = leaf ? PICKS[keyOf(leaf.file, leaf.stroka)] : null;
+  const u = unitOf(unitLabel);
+  let s = `<div class="ladder">${title?`<h3>${esc(title)}</h3>`:''}${u ? `<p class="unit">Шкала: <b>${esc(u.name)}</b>${u.how ? ' — ' + esc(u.how) : ''}</p>` : ''}`;
+  const val = l => { const v = levels[l] ?? levels[String(l)] ?? '—'; return u && u.short && /^[\d.,\s–-]+$/.test(v) ? `${v} ${u.short}` : v; };
+  if (o) s += `<div class="lv new"><b>!</b><span><span class="tag">новая</span>было ${fmt(o.bylo)}, выбрано ${fmt(o.novoe)} — ещё не в хранилище</span></div>`;
   for (let l = 10; l >= 1; l--){
-    const c = l === cur ? 'cur' : (l === goal && goal !== cur) ? 'goal' : '';
-    const tag = c === 'cur' ? 'сейчас' : c === 'goal' ? 'цель' : '';
-    s += `<div class="lv ${c}"><b>${l}</b><span>${tag?`<span class="tag">${tag}</span>`:''}${esc(levels[l] ?? levels[String(l)] ?? '—')}</span></div>`;
+    const c = o && l === cur ? 'new' : l === cur ? 'cur' : (l === goal && goal !== cur) ? 'goal' : '';
+    const tag = c === 'new' ? 'выбрано' : c === 'cur' ? 'сейчас' : c === 'goal' ? 'цель' : '';
+    const body = `<b>${l}</b><span>${tag?`<span class="tag">${tag}</span>`:''}${esc(val(l))}</span>`;
+    s += k ? `<button class="lv ${c}" data-k="${esc(k)}" data-v="${l}" aria-label="Поставить ${l}">${body}</button>` : `<div class="lv ${c}">${body}</div>`;
   }
+  if (k) s += `<div class="picks">${score != null ? `<button data-k="${esc(k)}" data-v="0">Без оценки</button>` : ''}${o ? `<button data-k="${esc(k)}" data-v="back">Вернуть ${fmt(o.bylo)}</button>` : ''}</div>`;
+  if (k) LEAVES[k] = leaf;
   return s + `</div>`;
 }
 
@@ -216,8 +257,8 @@ function wheel(){
 function goSphere(i){ si = i; DATA = i < 0 ? null : RAW.spheres[i]; path = []; render(); scrollTo(0,0); }
 
 function render(){
-  if (si < 0){ app.innerHTML = wheel(); bind(); return; }
-  let h = (path.length === 0 ? tabs() : '') + crumbs();
+  if (si < 0){ app.innerHTML = pendingBox() + wheel(); bind(); return; }
+  let h = pendingBox() + (path.length === 0 ? tabs() : '') + crumbs();
   if (path.length === 0){
     h += head(DATA.score, DATA.sphere, `Среднее по ${DATA.rated} лучам из ${DATA.rays.length} · данные на ${DATA.date.split('-').reverse().join('.')}`, DATA.rays, 'сфера', DATA.calc);
     h += radar(DATA.rays, true) + rows(DATA.rays, true);
@@ -228,15 +269,21 @@ function render(){
     h += head(r.score, r.name, z.length ? `Зон: ${z.length}` : 'Одна линейка, без зон', z.length ? z : null, 'луч', r.calc);
     if (r.note) h += `<div class="note">${esc(r.note)}</div>`;
     if (z.length){ h += radar(z, true) + rows(z, true); }
-    else if (hasLevels(r)) h += ladder('', r.levels, r.score);
+    else if (hasLevels(r)) h += ladder('', r.levels, r.score, {file: r.file, stroka: r.name}, r.unit);
+    h += notes(r);
   } else {
     const r = DATA.rays[path[0]], z = r.zones[path[1]];
-    h += head(z.score, z.name, `Зона луча «${esc(r.name)}»`, z.signs.length > 1 ? z.signs : null, 'зона', z.calc);
+    h += head(z.score, z.name, `Зона луча «${esc(r.name)}»${z.desc ? ' · ' + esc(z.desc) : ''}`, z.signs.length > 1 ? z.signs : null, 'зона', z.calc);
     if (z.note) h += `<div class="note">${esc(z.note)}</div>`;
-    if (!z.signs.length && hasLevels(z)) h += ladder('', z.levels, z.score);
-    for (const sg of z.signs) if (hasLevels(sg)) h += ladder(`${sg.name}${sg.score!=null?' — '+fmt(sg.score):''}`, sg.levels, sg.score);
+    if (!z.signs.length && hasLevels(z)) h += ladder('', z.levels, z.score, {file: r.file, stroka: z.name}, z.unit);
+    for (const sg of z.signs){
+      const lv = hasLevels(sg) ? sg.levels : z.levels;  // своей линейки нет — линейка зоны (CLAUDE.md, п. 5.3)
+      if (lv && Object.keys(lv).length) h += ladder(`${sg.name}${sg.desc ? ' (' + sg.desc + ')' : ''}${sg.score!=null?' — '+fmt(sg.score):''}`, lv, sg.score, {file: r.file, stroka: `${z.name} / ${sg.name}`}, sg.unit) + notes(sg);
+    }
+    h += notes(z);
     if (!hasLevels(z) && !z.signs.some(s => hasLevels(s))) h += `<div class="note">Линейки уровней в файле пока нет.</div>`;
   }
+  if (path.length && canPick()) h += `<p class="status" id="status" role="status">${esc(STATUS)}</p><p class="legend">Нажмите уровень, чтобы выбрать новую оценку. Выбор сразу сохраняется на этой странице; в хранилище его переносит Claude.</p>`;
   app.innerHTML = h;
   bind();
 }
@@ -244,10 +291,89 @@ function bind(){
   app.querySelectorAll('[data-s]').forEach(b => b.onclick = () => goSphere(+b.dataset.s));
   app.querySelectorAll('[data-go]').forEach(b => b.onclick = () => { path = path.slice(0, +b.dataset.go); render(); scrollTo(0,0); });
   const open = i => { if (si < 0) return goSphere(i); path = [...path, i]; render(); scrollTo(0,0); };
+  app.querySelectorAll('[data-k][data-v]').forEach(b => b.onclick = () => pick(b.dataset.k, b.dataset.v));
   app.querySelectorAll('.row[data-i], .hit[data-i]').forEach(b => {
     b.addEventListener('click', () => open(+b.dataset.i));
     b.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(+b.dataset.i); } });
   });
 }
+// ---------- выбор оценок нажатием (база страницы, коллекция «vybor») ----------
+let PICKS = {}, LEAVES = {}, STATUS = '', db = null, writable = true;
+function keyOf(file, stroka){ return file + '|' + stroka; }
+function idOf(k){ let h = 0x811c9dc5; for (const ch of new TextEncoder().encode(k)){ h ^= ch; h = Math.imul(h, 0x01000193) >>> 0; } return 'v' + h.toString(16).padStart(8, '0'); }
+function canPick(){ return !!(db && writable && DATA && (!RAW.edit || RAW.edit.includes(DATA.nn))); }
+function baseLeaf(sphere, file, stroka){
+  const B = JSON.parse(BASE), s = B.spheres.find(x => x.nn === sphere), r = s && s.rays.find(x => x.file === file);
+  if (!r) return undefined;
+  if (!r.zones.length) return r.name === stroka ? r.score : undefined;
+  const [zn, sn] = stroka.split(' / '), z = r.zones.find(x => x.name === zn);
+  if (!z) return undefined;
+  if (sn == null) return z.signs.length ? undefined : z.score;
+  const sg = z.signs.find(x => x.name === sn); return sg ? sg.score : undefined;
+}
+const avg = kids => {
+  const v = kids.map(k => k.score).filter(x => x != null);
+  if (!v.length) return [null, null];
+  const a = v.reduce((x, y) => x + y, 0) / v.length, out = roundU(a);
+  // две цифры после запятой, как в shkala.py (ровно половина — к чётной)
+  const x = a * 100, f = Math.floor(x), h2 = Math.abs(x - f - 0.5) < 1e-9 ? (f % 2 ? f + 1 : f) : Math.round(x);
+  let c = `(${v.join(' + ')}) / ${v.length} = ${String(h2 / 100).replace('.', ',')} → ${out}`;
+  if (v.length < kids.length) c += `; без оценки, не учтено: ${kids.length - v.length}`;
+  return [out, c];
+};
+// Пересчёт снизу вверх по тому же правилу, что shkala.py: оценки из хранилища + выбранные на карточке
+function recalc(){
+  const R = JSON.parse(BASE);
+  for (const s of R.spheres){
+    for (const r of s.rays){
+      const pick = st => { const o = PICKS[keyOf(r.file, st)]; return o ? o.novoe : undefined; };
+      if (!r.zones.length){ const v = pick(r.name); if (v !== undefined) r.score = v; continue; }
+      for (const z of r.zones){
+        if (z.signs.length){ z.signs.forEach(sg => { const v = pick(`${z.name} / ${sg.name}`); if (v !== undefined) sg.score = v; }); [z.score, z.calc] = avg(z.signs); }
+        else { const v = pick(z.name); if (v !== undefined) z.score = v; }
+      }
+      [r.score, r.calc] = avg(r.zones);
+    }
+    [s.score, s.calc] = avg(s.rays);
+    s.rated = s.rays.filter(r => r.score != null).length;
+  }
+  RAW.spheres = R.spheres;
+  if (si >= 0) DATA = RAW.spheres[si];
+}
+function pendingBox(){
+  const list = Object.values(PICKS);
+  if (!list.length) return '';
+  const n = list.length, word = n % 10 === 1 && n % 100 !== 11 ? 'новая оценка' : [2,3,4].includes(n % 10) && ![12,13,14].includes(n % 100) ? 'новые оценки' : 'новых оценок';
+  return `<div class="pending"><span><b>${n} ${word}</b> ещё не в хранилище. Скажите Claude: «перенеси оценки с карточки».</span>
+    <details><summary>Что выбрано</summary><ul>${list.map(o => `<li>${esc(o.luch.replace(/^\d+ Луч — /, ''))}: ${esc(o.stroka)} — ${fmt(o.bylo)} → ${fmt(o.novoe)}</li>`).join('')}</ul></details></div>`;
+}
+async function pick(k, v){
+  const leaf = LEAVES[k]; if (!leaf || !db) return;
+  const bylo = baseLeaf(DATA.nn, leaf.file, leaf.stroka);
+  const novoe = v === 'back' ? bylo : v === '0' ? null : +v;
+  const ref = db.doc('vybor/' + idOf(k));
+  try {
+    if (novoe === bylo) { await ref.delete(); delete PICKS[k]; STATUS = `Вернул как в хранилище: ${fmt(bylo)}.`; }
+    else {
+      const o = {sfera: DATA.nn, luch: leaf.file, stroka: leaf.stroka, bylo: bylo ?? null, novoe, kogda: new Date().toISOString()};
+      await ref.set(o); PICKS[k] = o; STATUS = `Сохранено: ${leaf.stroka} — ${fmt(novoe)}.`;
+    }
+  } catch (e) {
+    if (e && e.code === 'invalid_argument') writable = false;
+    STATUS = e && (e.code === 'invalid_argument' || e.code === 'not_granted') ? 'Выбор здесь только для просмотра: менять оценки может владелец страницы.' : 'Не сохранилось. Проверьте связь и нажмите ещё раз.';
+    render(); const st = document.getElementById('status'); if (st) st.classList.add('err'); return;
+  }
+  recalc(); render();
+}
 render();
+(async () => {
+  try { db = window.claude && await window.claude.use('db'); } catch { db = null; }
+  if (!db) return;
+  db.collection('vybor').onSnapshot(snap => {
+    const next = {};
+    for (const d of snap.docs){ const o = d.data(); if (o && o.luch && o.stroka) next[keyOf(o.luch, o.stroka)] = o; }
+    PICKS = next; recalc(); render();
+  }, () => {});
+  render();
+})();
 </script>
