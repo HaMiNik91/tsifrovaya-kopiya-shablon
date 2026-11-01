@@ -63,7 +63,8 @@ ZHURNAL = "00 Старт/Обновления из шаблона.md"
 # Личные места: файлы в них не меняются и не удаляются, только добавляются новые из шаблона.
 LICHNYE_PAPKI = ("01 Входящие/", "20 Журнал/", "40 Люди/", "90 Архив/")
 LICHNYE_PODPAPKI = ("Входящие", "Записи", "Опыт", "Путь", "Увлечения")  # внутри «10 Сферы/NN …/»
-LICHNYE_FAYLY = {"00 Старт/Как со мной работать.md", "00 Старт/Промт для нового чата.md", ZHURNAL}
+LICHNYE_FAYLY = {"00 Старт/Как со мной работать.md", "00 Старт/Промт для нового чата.md", "00 Старт/Профиль.md",
+                 ZHURNAL}
 # Общие файлы: правила, программы, страница, заготовки. Если владелец и шаблон изменили одно
 # и то же место, побеждает шаблон (вариант владельца — в отчёте); свои добавления в других
 # местах сохраняются. Свои правила владелец держит в «Как со мной работать» (CLAUDE.md, раздел 12).
@@ -391,7 +392,38 @@ def izmeneniya(sh, ot, do):
         else:
             res.append((st[0], diff[i + 1], diff[i + 1]))
             i += 2
-    return res
+    return po_kodam(sh, ot, do, res)
+
+
+KOD = re.compile(r'^код:\s*"?([\w.]+)"?\s*$', re.M)
+
+
+def kod_fayla(sh, rev, path):
+    """`код` сферы или луча из шапки файла этой версии шаблона (None — нет кода)."""
+    if not path.endswith(".md"):
+        return None
+    r = sh.g("show", f"{rev}:{path}", check=False)
+    if r.returncode != 0 or not r.stdout.startswith("---\n"):
+        return None
+    m = KOD.search(r.stdout.split("\n---\n", 1)[0])
+    return m.group(1) if m else None
+
+
+def po_kodam(sh, ot, do, res):
+    """Удалённый и добавленный файл с одним `код` — это переименование (луч или сфера сменили имя),
+    даже если текст изменился так сильно, что git этого не узнал."""
+    udal = {kod_fayla(sh, ot, old): (i, old) for i, (st, old, _) in enumerate(res) if st == "D"}
+    udal.pop(None, None)
+    para, lishnie = {}, set()
+    for i, (st, _, new) in enumerate(res):
+        if st == "A":
+            k = kod_fayla(sh, do, new)
+            if k in udal:
+                para[i] = udal[k]
+    for i, (j, old) in para.items():
+        res[i] = ("R", old, res[i][2])
+        lishnie.add(j)
+    return [x for n, x in enumerate(res) if n not in lishnie]
 
 
 def obnovit(a, sh, base, theirs, how, cfg, repo, vetka):
@@ -541,9 +573,14 @@ def obnovit(a, sh, base, theirs, how, cfg, repo, vetka):
 
 def otchet(base, theirs, how, log, notes, claude, repo, sh):
     date = sh.g("log", "-1", "--format=%cs", theirs).stdout.strip()
+    def nomer(rev):  # номер версии из «00 Старт/Что нового.md» (свойство `версия`)
+        r = sh.g("show", f"{rev}:00 Старт/Что нового.md", check=False)
+        m = re.search(r'^версия:\s*"?([^"\n]+)"?\s*$', r.stdout, re.M) if r.returncode == 0 else None
+        return m.group(1) if m else "—"
     L = [f"## {dt.date.today().isoformat()} — обновление из шаблона",
          "",
-         f"Шаблон {repo}: версия {base[:7]} ({how}) → {theirs[:7]} от {date}.",
+         f"Шаблон {repo}: версия {nomer(base)} ({base[:7]}, {how}) → {nomer(theirs)} ({theirs[:7]} от {date}). "
+         "Что нового — [[Что нового]].",
          ""]
     counts = ", ".join(f"{k} — {len(v)}" for k, v in log.items() if v) or "изменений в общих файлах нет"
     L.append(f"**Итог:** {counts}.")
