@@ -14,7 +14,8 @@
                                                      VYBOR.json — список документов коллекции «vybor» карточки (ArtifactData list):
                                                      {"luch": "01 Луч — Гибкость", "stroka": "Шпагат / Продольный", "bylo": 2, "novoe": 3}
                                                      (novoe null — «нет»). Всё или ничего: если строка не найдена или в файле уже
-                                                     не «bylo», ни один файл не пишется. После переноса — запустить с --write.
+                                                     не «bylo», ни один файл не пишется. У изменённых лучей `точность` становится пустой
+                                                     (оценка уточнена по линейке). После переноса — запустить с --write.
 
 Что откуда берётся:
   • Оценки ставятся только на нижнем уровне — в шапке файла луча, свойство `оценки`:
@@ -43,6 +44,10 @@
     слабый и сильный луч и карточку (свою оценку получает). Скрытая сфера не входит в колесо и карточку; в её
     «NN Шкала» программа пишет `скрыта: true` (по нему таблица Колеса её не показывает).
     Ошибка: два луча или две сферы с одним кодом, код луча не начинается с кода сферы.
+  • Точность (CLAUDE.md, п. 5.4): `точность` луча — пусто или «примерно» (оценка поставлена только общим вопросом
+    сферы в опроснике). Примерный луч считается как обычный, но в выводе помечен «примерно», а на карточке показан
+    другим цветом; у сферы карточка показывает, сколько её лучей примерные. Другое значение — ошибка.
+    `вопрос` — простой вопрос луча для опросника; программа передаёт его на карточку.
 
 Код выхода 1 — ошибка формы (оценку нельзя прочитать). Предупреждения (нет линейки, не 10 уровней) код не меняют.
 """
@@ -273,6 +278,13 @@ def load_ray(path, errors, warnings):
     scopes = parse_body(text)
     ray = {"name": name, "file": path.stem, "kod": fm.get("код") or None, "hidden": flag(fm.get("скрыт")),
            "rated_on": fm.get("оценено") or None, "zones": [], "levels": {}}
+    tochnost = fm.get("точность") or ""
+    if not isinstance(tochnost, str) or tochnost.strip().lower() not in ("", "примерно"):
+        errors.append(f"{path.stem}: `точность` «{tochnost}» — нужно пусто или «примерно»")
+    ray["approx"] = isinstance(tochnost, str) and tochnost.strip().lower() == "примерно"
+    vopros = fm.get("вопрос")
+    if isinstance(vopros, str) and vopros.strip():
+        ray["vopros"] = vopros.strip()
     zones = {}
     for it in items:
         m = re.match(r"^(.+?):\s*(нет|\d+)\s*$", it)
@@ -346,6 +358,11 @@ def load_ray(path, errors, warnings):
     ray["leaves_rated"] = sum(1 for x in leaves if x["score"] is not None)
     if ray["zones"]:
         ray["zones_rated"] = sum(1 for z in ray["zones"] if z["score"] is not None)
+    if ray["approx"]:  # примерная оценка луча — примерны и все его зоны и признаки (для цвета на карточке)
+        for z in ray["zones"]:
+            z["approx"] = True
+            for s in z["signs"]:
+                s["approx"] = True
     for z in ray["zones"]:
         z["levels"] = {str(k): v for k, v in z["levels"].items()}
         for s in z["signs"]:
@@ -403,7 +420,7 @@ def load_sphere(folder, errors, warnings):
         hi = [r for r in rated if r["score"] == max(x["score"] for x in rated)]
     exact = round(sum(r["score"] for r in rated) / len(rated), 2) if rated else None
     return {"nn": nn, "sphere": folder.name[3:], "scale": scale, "paths": paths, "score": score, "calc": calc,
-            "exact": exact, "weak": lo, "strong": hi, "rays": rays, "shown": shown, **meta}
+            "exact": exact, "approx": sum(1 for r in shown if r["approx"]), "weak": lo, "strong": hi, "rays": rays, "shown": shown, **meta}
 
 
 def wheel_write(spheres):
@@ -454,6 +471,7 @@ def perenos(src):
             lines = [f"оценено: {today}" if ln.startswith("оценено:") else ln for ln in lines]
         else:
             lines.insert(next(i for i, ln in enumerate(lines) if ln.startswith("оценки:")), f"оценено: {today}")
+        lines = ["точность:" if ln.startswith("точность:") else ln for ln in lines]  # уточнено по линейке
         texts[p] = "---\n" + "\n".join(lines) + "\n---\n" + text[m.end():]
         done.append(f"{luch}: {stroka}: {'нет' if bylo is None else bylo} → {'нет' if novoe is None else novoe}")
     if problems:
@@ -497,7 +515,8 @@ def main():
         mark = "  (скрыта — не в колесе и не на карточке)" if s["hidden"] else ""
         print(f"■ {s['nn']} {s['sphere']}: сфера {s['score']} {('· ' + s['calc']) if s['calc'] else ''}{mark}")
         for r in s["rays"]:
-            print(f"   {r['name']}: {r['score']}  {r.get('calc') or ''}{'  (скрыт — не в оценке сферы)' if r['hidden'] else ''}")
+            print(f"   {r['name']}: {r['score']}  {r.get('calc') or ''}{'  (примерно)' if r['approx'] else ''}"
+                  f"{'  (скрыт — не в оценке сферы)' if r['hidden'] else ''}")
         if a.write:
             changed = []
             for p, r in zip(s["paths"], s["rays"]):
@@ -521,6 +540,7 @@ def main():
             print("✖ карточка не собрана: сначала исправить ошибки формы")
             sys.exit(1)
         data = [{"nn": s["nn"], "sphere": s["sphere"], "score": s["score"], "calc": s["calc"], "exact": s["exact"],
+                 "approx": s["approx"],
                  "rated": sum(1 for r in s["shown"] if r["score"] is not None), "rays": s["shown"]}
                 for s in spheres if not s["hidden"]]
         payload = {"built": datetime.date.today().isoformat(), "spheres": data,

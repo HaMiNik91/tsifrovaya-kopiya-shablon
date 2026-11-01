@@ -10,7 +10,7 @@
   --bg:#F2F4F1; --panel:#FFFFFF; --ink:#16201B; --muted:#5E6B64; --line:#D9DFDA;
   --accent:#2C55C9; --accent-soft:#E3E9FA; --weak:#C2412D; --weak-soft:#F8E3DF;
   --strong:#1D7F51; --strong-soft:#DDF0E6; --warn:#9A6B00; --warn-soft:#F6EBCB;
-  --low:#B58900; --low-soft:#FBF0C9;
+  --low:#B58900; --low-soft:#FBF0C9; --approx:#7A4FB5; --approx-soft:#EFE7F8;
   --display:"Unbounded","Arial Black",system-ui,sans-serif;
   --body:"Onest",system-ui,-apple-system,"Segoe UI",sans-serif;
   --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
@@ -19,12 +19,12 @@
   --bg:#111613; --panel:#19201C; --ink:#E7ECE8; --muted:#97A39C; --line:#2C3530;
   --accent:#7D9CF2; --accent-soft:#1E2846; --weak:#F0806C; --weak-soft:#3A1F1A;
   --strong:#5BC892; --strong-soft:#173226; --warn:#E3B34A; --warn-soft:#352A12;
-  --low:#F2CC4E; --low-soft:#3A3212; color-scheme:dark}}
+  --low:#F2CC4E; --low-soft:#3A3212; --approx:#BE9DF0; --approx-soft:#2C2140; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#111613; --panel:#19201C; --ink:#E7ECE8; --muted:#97A39C; --line:#2C3530;
   --accent:#7D9CF2; --accent-soft:#1E2846; --weak:#F0806C; --weak-soft:#3A1F1A;
   --strong:#5BC892; --strong-soft:#173226; --warn:#E3B34A; --warn-soft:#352A12;
-  --low:#F2CC4E; --low-soft:#3A3212; color-scheme:dark}
+  --low:#F2CC4E; --low-soft:#3A3212; --approx:#BE9DF0; --approx-soft:#2C2140; color-scheme:dark}
 body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45}
 .wrap{max-width:720px;margin:0 auto;padding-inline:16px;padding-block:16px 40px;display:grid;gap:16px}
 .crumbs{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:13px;color:var(--muted)}
@@ -54,6 +54,11 @@ h1{font-family:var(--display);font-weight:500;font-size:22px;margin:0;text-wrap:
 .row.weak .bar i{background:var(--weak)} .row.low .bar i{background:var(--low)} .row.strong .bar i{background:var(--strong)}
 .num{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right;font-size:15px}
 .row.weak .num{color:var(--weak)} .row.low .num{color:var(--low)} .row.strong .num{color:var(--strong)}
+/* «примерно» — оценка только по общему вопросу сферы (CLAUDE.md, п. 5.4, `точность`): свой цвет поверх слабого и сильного */
+.row.approx .bar i{background:repeating-linear-gradient(45deg,var(--approx) 0 4px,var(--approx-soft) 4px 7px)}
+.row.approx .num{color:var(--approx)}
+.chip.approx{background:var(--approx-soft);color:var(--approx)}
+.note.approx{color:var(--approx);background:var(--approx-soft)}
 .arrow{color:var(--muted)}
 .note{font-size:13px;color:var(--warn);background:var(--warn-soft);border-radius:10px;padding:10px 12px}
 .ladder{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:6px;display:grid;gap:2px}
@@ -150,11 +155,13 @@ function radar(items, tappable){
   s += `<polygon points="${shape}" fill="var(--accent)" fill-opacity=".18" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>`;
   const cls = rankClass(items);
   items.forEach((it,i) => {
-    const c = cls(it), col = c==='weak' ? 'var(--weak)' : c==='low' ? 'var(--low)' : c==='strong' ? 'var(--strong)' : 'var(--accent)';
+    const c = cls(it), col = it.approx === true ? 'var(--approx)' : c==='weak' ? 'var(--weak)' : c==='low' ? 'var(--low)' : c==='strong' ? 'var(--strong)' : 'var(--accent)';
     const deeper = tappable && canOpen(it);
     s += deeper ? `<g class="hit" data-i="${i}" tabindex="0" role="button" aria-label="Открыть ${esc(it.name)}">` : '<g>';
     if (deeper){ const [hx,hy] = pt(i, 11); s += `<circle cx="${hx}" cy="${hy}" r="26" fill="transparent"/>`; }
-    if (it.score != null){ const [x,y] = pt(i, it.score); s += `<circle cx="${x}" cy="${y}" r="5" fill="${col}"/>`; }
+    if (it.score != null){ const [x,y] = pt(i, it.score); s += it.approx === true
+      ? `<circle cx="${x}" cy="${y}" r="5" fill="var(--panel)" stroke="${col}" stroke-width="2"/>`   // примерно — пустой кружок
+      : `<circle cx="${x}" cy="${y}" r="5" fill="${col}"/>`; }
     const [lx,ly] = pt(i, 11.9); const anchor = Math.abs(lx-cx) < 8 ? 'middle' : lx > cx ? 'start' : 'end';
     const lines = wrap(it.label || it.name), y0 = ly - (lines.length - 1) * 8;
     s += `<text x="${lx}" y="${y0}" text-anchor="${anchor}" dominant-baseline="middle" font-size="15" font-family="Onest,system-ui,sans-serif" fill="${it.score==null ? 'var(--muted)' : 'var(--ink)'}">`
@@ -173,10 +180,12 @@ function rows(items, onTap){
     const list = rn ? it.rays : zn ? it.zones : it.signs || [];
     const rated = list.filter(x => x.score != null).length;
     const total = rn || zn || sn, word = rn ? 'лучей' : zn ? 'зон' : 'признаков';
-    const extra = it.score == null ? (total ? `не оценено, 0 из ${total}` : 'не оценено')
+    let extra = it.score == null ? (total ? `не оценено, 0 из ${total}` : 'не оценено')
       : total ? (rated < total ? `оценено ${rated} из ${total} ${word}` : `${total} ${word}`) : '';
+    if (it.approx === true && it.score != null) extra = (extra ? extra + ' · ' : '') + 'примерно';
+    else if (it.approx > 0) extra = (extra ? extra + ' · ' : '') + `примерных лучей: ${it.approx}`;
     const tag = deeper ? 'button' : 'div';
-    return `<${tag} class="row ${cls(it)} ${deeper?'':'static'}" ${deeper?`data-i="${i}"`:''}>
+    return `<${tag} class="row ${cls(it)} ${it.approx === true ? 'approx' : ''} ${deeper?'':'static'}" ${deeper?`data-i="${i}"`:''}>
       <span class="name">${esc(it.name)}${extra?`<em>${esc(extra)}</em>`:''}</span>
       <span class="bar"><i style="width:${(it.score ?? 0)*10}%"></i></span>
       <span class="num">${fmt(it.score)}</span><span class="arrow">${deeper?'›':''}</span></${tag}>`;
@@ -218,7 +227,8 @@ function chips(items){
   const rated = items.filter(i => i.score != null), cls = rankClass(items);
   const w = rated.filter(i => cls(i)==='weak').map(i=>i.name), lo = rated.filter(i => cls(i)==='low').map(i=>i.name), st = rated.filter(i => cls(i)==='strong').map(i=>i.name);
   const none = items.filter(i => i.score == null).map(i=>i.name);
-  return `<div class="chips">${w.map(n=>`<span class="chip weak">слабое: ${esc(n)}</span>`).join('')}${lo.map(n=>`<span class="chip low">ниже других: ${esc(n)}</span>`).join('')}${st.map(n=>`<span class="chip strong">сильное: ${esc(n)}</span>`).join('')}${none.length?`<span class="chip none">без оценки: ${none.length}</span>`:''}</div>`;
+  const ap = path.length ? 0 : items.filter(i => i.approx === true && i.score != null).length;  // внутри луча — заметка, а не значок
+  return `<div class="chips">${ap?`<span class="chip approx">примерно: ${ap}</span>`:''}${w.map(n=>`<span class="chip weak">слабое: ${esc(n)}</span>`).join('')}${lo.map(n=>`<span class="chip low">ниже других: ${esc(n)}</span>`).join('')}${st.map(n=>`<span class="chip strong">сильное: ${esc(n)}</span>`).join('')}${none.length?`<span class="chip none">без оценки: ${none.length}</span>`:''}</div>`;
 }
 
 function crumbs(){
@@ -268,6 +278,7 @@ function render(){
     const z = r.zones || [];
     h += head(r.score, r.name, z.length ? `Зон: ${z.length}` : 'Одна линейка, без зон', z.length ? z : null, 'луч', r.calc);
     if (r.note) h += `<div class="note">${esc(r.note)}</div>`;
+    if (r.approx && r.score != null) h += `<div class="note approx">Оценка примерная — поставлена по общему вопросу сферы. Проверьте линейку и выберите свой уровень: отметка «примерно» снимется.</div>`;
     if (z.length){ h += radar(z, true) + rows(z, true); }
     else if (hasLevels(r)) h += ladder('', r.levels, r.score, {file: r.file, stroka: r.name}, r.unit);
     h += notes(r);
@@ -326,14 +337,16 @@ function recalc(){
   const R = JSON.parse(BASE);
   for (const s of R.spheres){
     for (const r of s.rays){
-      const pick = st => { const o = PICKS[keyOf(r.file, st)]; return o ? o.novoe : undefined; };
+      const pick = st => { const o = PICKS[keyOf(r.file, st)]; if (o) r.approx = false; return o ? o.novoe : undefined; };
       if (!r.zones.length){ const v = pick(r.name); if (v !== undefined) r.score = v; continue; }
       for (const z of r.zones){
         if (z.signs.length){ z.signs.forEach(sg => { const v = pick(`${z.name} / ${sg.name}`); if (v !== undefined) sg.score = v; }); [z.score, z.calc] = avg(z.signs); }
         else { const v = pick(z.name); if (v !== undefined) z.score = v; }
       }
       [r.score, r.calc] = avg(r.zones);
+      if (!r.approx) r.zones.forEach(z => { z.approx = false; z.signs.forEach(sg => sg.approx = false); });
     }
+    s.approx = s.rays.filter(r => r.approx).length;   // уточнённый на карточке луч больше не примерный
     [s.score, s.calc] = avg(s.rays);
     s.rated = s.rays.filter(r => r.score != null).length;
   }
