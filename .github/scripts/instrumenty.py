@@ -7,7 +7,10 @@
 
 Смотрит папки «Инструменты» всех сфер (10 Сферы/*/Инструменты/*.md) и свойство `тип`:
   • инструмент — карточка `NN Инструмент — Название.md`: `вид` одно из VIDY, `научность` одно из NAUCH
-                 (пусто — предупреждение), `перепройти` — целое число месяцев или пусто, `сфера` — своя сфера.
+                 (пусто — предупреждение), `перепройти` — целое число месяцев или пусто, `сфера` — своя сфера,
+                 `скрыт` — true/false. Таблица вопросов в разделе «## Вопросы»
+                 (`| № | Вопрос | Оригинал | Шкала | Наоборот |`): номера подряд с 1, вопрос и шкала не пустые,
+                 «Наоборот» — пусто или «да»; показывает число вопросов по шкалам. Таблицы нет — предупреждение.
                  Пишет `последнее` — дата самого позднего прохождения ("" — ещё не проходил) и `следующее` =
                  последнее + перепройти ("ГГГГ-ММ"; "" — если нет прохождений или срока). Срок прошёл — предупреждение.
   • результат  — прохождение `NN ГГГГ-ММ-ДД Тест — Название.md`: `инструмент` — ссылка на карточку из любой сферы,
@@ -93,6 +96,45 @@ def compare(prev, cur):
     return lines
 
 
+def check_table(path, text, errors, warnings):
+    body = text[FM.match(text).end():] if FM.match(text) else text
+    m = re.search(r"^## Вопросы\s*$(.*?)(?=^## |\Z)", body, re.M | re.S)
+    rows = []
+    if m:
+        head = False
+        for line in m.group(1).splitlines():
+            if not line.startswith("|"):
+                continue
+            c = [x.strip() for x in line.strip().strip("|").split("|")]
+            if c[:2] == ["№", "Вопрос"]:
+                head = True
+                continue
+            if head and set("".join(c)) <= set("-: "):
+                continue
+            if head:
+                rows.append(c)
+    if not rows:
+        warnings.append(f"{path.name}: нет таблицы вопросов «| № | Вопрос | Оригинал | Шкала | Наоборот |»")
+        return
+    scales = {}
+    for i, c in enumerate(rows, 1):
+        if len(c) != 5:
+            errors.append(f"{path.name}: вопрос {c[0] if c else '?'} — нужно 5 столбцов")
+            continue
+        n, q, _, sc, rev = c
+        if n != str(i):
+            errors.append(f"{path.name}: номер «{n}» вместо {i} — номера подряд с 1")
+        if not q or not sc:
+            errors.append(f"{path.name}: вопрос {n} — пустой текст или шкала")
+        if rev not in ("", "да"):
+            errors.append(f"{path.name}: вопрос {n} — «Наоборот» пусто или «да», а не «{rev}»")
+        s = scales.setdefault(sc, [0, 0])
+        s[0] += 1
+        s[1] += rev == "да"
+    print(f"• {path.stem}: вопросов {len(rows)} — " +
+          "; ".join(f"{k}: {v[0]} (наоборот {v[1]})" for k, v in scales.items()))
+
+
 def add_months(day, months):
     y, m = int(day[:4]), int(day[5:7]) - 1 + months
     return f"{y + m // 12}-{m % 12 + 1:02d}"
@@ -131,6 +173,7 @@ def main():
                     months = int(per)
                 else:
                     errors.append(f"{p.name}: `перепройти` «{per}» — целое число месяцев или пусто")
+            check_table(p, p.read_text(encoding="utf-8"), errors, warnings)
             if p.stem in cards:
                 errors.append(f"{p.name}: карточка с таким именем уже есть в {cards[p.stem]['path'].parent.parent.name}")
             cards[p.stem] = {"path": p, "months": months, "runs": []}
