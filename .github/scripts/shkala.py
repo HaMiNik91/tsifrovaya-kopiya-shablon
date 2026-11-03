@@ -89,7 +89,7 @@ def read_fm(text):
         elif ":" in line and not line.startswith(" "):
             key, val = line.split(":", 1)
             key, val = key.strip(), val.strip()
-            out[key] = val.strip('"') if val else []
+            out[key] = [] if val in ("", "[]") else val.strip('"')  # «[]» — пустой список YAML
     return out
 
 
