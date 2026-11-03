@@ -52,6 +52,8 @@ jobs:
           if [ -n "$flag" ]; then exit 0; fi
           python3 .github/scripts/shkala.py --write
           python3 .github/scripts/medkarta.py --write
+          python3 .github/scripts/instrumenty.py --write
+          python3 .github/scripts/sled_shag.py --write
           python3 .github/scripts/check_links.py || echo "⚠ Есть битые ссылки — список выше; попросите Claude поправить." >> "$GITHUB_STEP_SUMMARY"
           if [ -n "$(git status --porcelain)" ]; then
             git add -A

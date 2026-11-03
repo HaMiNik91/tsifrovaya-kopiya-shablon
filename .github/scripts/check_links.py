@@ -74,7 +74,7 @@ def main():
         text = p.read_text(encoding="utf-8")
         body = COMMENT.sub("", INLINE_CODE.sub("", CODE_BLOCK.sub("", text)))
         for target in WIKI.findall(body):
-            name = target.split("|")[0].split("#")[0].strip()
+            name = target.split("|")[0].split("#")[0].strip().rstrip("\\").strip()  # «\|» — подпись внутри таблицы
             if name and name not in names and pathlib.Path(name).name not in names:
                 broken.append((p, f"[[{target}]]"))
         for target in MD_LINK.findall(body):

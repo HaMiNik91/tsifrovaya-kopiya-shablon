@@ -1,6 +1,7 @@
 # Проверка битых ссылок после каждого изменения (CLAUDE.md, раздел 3).
 # Запускается сама при каждом коммите в main и при каждом запросе на слияние (Pull Request).
 # Если есть битые ссылки — проверка красная, список ссылок виден в журнале проверки.
+# Заодно pomoshniki.py проверяет карточки помощников (CLAUDE.md, п. 5.5).
 name: Проверка ссылок
 
 on:
@@ -19,3 +20,9 @@ jobs:
           python-version: "3.12"
       - name: Битые ссылки
         run: python3 .github/scripts/check_links.py
+      - name: Помощники по лучам
+        run: python3 .github/scripts/pomoshniki.py
+      - name: Деньги
+        run: python3 .github/scripts/dengi.py
+      - name: План недели
+        run: python3 .github/scripts/nedelya.py
