@@ -22,6 +22,11 @@
   - Переименованный в шаблоне файл переносится под новое имя вместе с правками владельца,
     ссылки [[старое имя]] во всех файлах копии исправляются.
   - Файл, удалённый в шаблоне, удаляется, только если владелец его не менял.
+  - Модули («80 Шаблоны/Модули/<имя>/файлы/…»): если модуль включён в копии («модули включены»
+    в «00 Старт/Профиль.md»), правка файла модуля в шаблоне переносится и в рабочий файл копии
+    по тому же пути без «80 Шаблоны/Модули/<имя>/файлы/» — по тем же правилам (свои оценки
+    и правки владельца остаются). Новый файл модуля добавляется, удалённый — удаляется, если
+    владелец его не менял. У выключенного модуля обновляется только сама заготовка.
 
 Версия шаблона, до которой обновлена копия, хранится в `.github/shablon.json` (`versiya`).
 Если её ещё нет, программа находит версию сама: шаблон, из которого сделан первый коммит
@@ -114,6 +119,26 @@ def ne_perenosit(path):
 
 def workflow(path):
     return path.startswith(".github/workflows/")
+
+
+PROFIL = "00 Старт/Профиль.md"
+MODUL = re.compile(r"^80 Шаблоны/Модули/([^/]+)/файлы/(.+)$")
+
+
+def moduli_vklyucheny():
+    """Модули, включённые в копии: список `модули включены` в профиле (пусто — только Основа)."""
+    f = ROOT / PROFIL
+    if not f.is_file():
+        return set()
+    fm = f.read_text(encoding="utf-8").split("\n---\n", 1)[0]
+    m = re.search(r"^модули включены:[ \t]*\n((?:[ \t]+-.*\n?)*)", fm, re.M)
+    return {x.split("-", 1)[1].strip().strip('"') for x in m.group(1).splitlines() if x.strip()} if m else set()
+
+
+def v_kopii(path, vklyucheny):
+    """Путь файла модуля в копии, если модуль включён; иначе None."""
+    m = MODUL.match(path)
+    return m.group(2) if m and m.group(1) in vklyucheny else None
 
 
 # ---------- шаблон ----------
@@ -441,13 +466,30 @@ def obnovit(a, sh, base, theirs, how, cfg, repo, vetka):
     wf_ot = cfg.get("workflows_ot")
     if wf_ot and not sh.rev(wf_ot):
         wf_ot = None
-    changes = []
+    changes = []  # (вид, старый путь, новый путь, «было», откуда в шаблоне: старый, новый)
     for st, old, new in izmeneniya(sh, base, theirs):
         if not (wf_ot and (workflow(old) or workflow(new))):
-            changes.append((st, old, new, base))
+            changes.append((st, old, new, base, old, new))
     if wf_ot:
-        changes += [(st, old, new, wf_ot) for st, old, new in izmeneniya(sh, wf_ot, theirs)
+        changes += [(st, old, new, wf_ot, old, new) for st, old, new in izmeneniya(sh, wf_ot, theirs)
                     if workflow(old) or workflow(new)]
+    # файлы включённых модулей — ещё и в рабочие места копии
+    vkl = moduli_vklyucheny()
+    for st, old, new, ot, _, _ in list(changes):
+        k_old, k_new = v_kopii(old, vkl), v_kopii(new, vkl)
+        if st in ("A", "C") and k_new:
+            changes.append(("A", k_new, k_new, ot, old, new))
+        elif st in ("M", "T") and k_new:
+            changes.append((st, k_new, k_new, ot, old, new))
+        elif st == "D" and k_old:
+            changes.append(("D", k_old, k_old, ot, old, new))
+        elif st == "R" and (k_old or k_new):
+            if k_old and k_new:
+                changes.append(("R", k_old, k_new, ot, old, new))
+            elif k_old:
+                changes.append(("D", k_old, k_old, ot, old, old))
+            else:
+                changes.append(("A", k_new, k_new, ot, new, new))
     bases = {b: sh.files(b) for b in {c[3] for c in changes}}
 
     def local(p):
@@ -465,7 +507,7 @@ def obnovit(a, sh, base, theirs, how, cfg, repo, vetka):
         writes[path] = data
         log[kind].append(path)
 
-    for st, old, new, ot in changes:
+    for st, old, new, ot, s_old, s_new in changes:
         if ne_perenosit(new) or ne_perenosit(old):
             continue
         B = bases[ot]
@@ -473,8 +515,8 @@ def obnovit(a, sh, base, theirs, how, cfg, repo, vetka):
             st = "A"
         if st == "R" and local(old) is None and local(new) is not None:
             st = "M"  # уже переименован раньше — слить в новый
-        tdata = sh.blob(T[new]) if new in T else None
-        bdata = sh.blob(B[old]) if old in B else None
+        tdata = sh.blob(T[s_new]) if s_new in T else None
+        bdata = sh.blob(B[s_old]) if s_old in B else None
         if st == "A":
             mine = local(new)
             if mine is None:
