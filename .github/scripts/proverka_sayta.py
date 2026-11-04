@@ -358,6 +358,61 @@ def t_opros(ctx, port, snimki):
     s.snimok(snimki, "opros-priznak")
 
 
+def kopiya(files):
+    """Пробная копия хранилища с этими файлами (путь → текст) — для сравнения с программами."""
+    import shutil
+    import tempfile
+    d = pathlib.Path(tempfile.mkdtemp(prefix="sayt-")) / "kopiya"
+    shutil.copytree(ROOT, d, ignore=shutil.ignore_patterns(".git"))
+    for fp, text in files.items():
+        (d / fp).parent.mkdir(parents=True, exist_ok=True)
+        (d / fp).write_text(text, encoding="utf-8")
+    return d
+
+
+def ocenki(text, val, kromе=None):
+    """Все строки `оценки` луча — одной цифрой."""
+    return re.sub(r'^(\s+-\s+"[^"]+?):\s*(нет|\d+)"', lambda m: f'{m.group(1)}: {val}"', text, flags=re.M)
+
+
+def t_shag(ctx, port, snimki):
+    """«Следующий шаг»: те же помощники, что у sled_shag.py; «Взять в Путь» — тот же файл, что --vzyat."""
+    g = Gh()
+    nach = {}
+    for p, t in g.files.items():
+        if p.startswith("10 Сферы/01 ") and "/Шкала/" in p and fm_get(t, "тип") == "луч":
+            nach[p] = ocenki(t, 4 if fm_get(t, "код") == "01.12" else 8)
+    shk = "10 Сферы/01 Здоровье и молодость/01 Шкала.md"
+    nach[shk] = re.sub(r"^приоритет:.*$", "приоритет: 1", g.files[shk], count=1, flags=re.M)
+    s = Sayt(ctx, port, nach).open()
+    s.go("#/shag")
+    s.ждать_текст("Взять в Путь")
+    txt = s.text()
+    d = kopiya(nach)
+    subprocess.run([sys.executable, ".github/scripts/shkala.py", "--write"], cwd=d, capture_output=True, check=True)
+    r = subprocess.run([sys.executable, ".github/scripts/sled_shag.py"], cwd=d, capture_output=True, text=True)
+    prio = r.stdout.split("## Остальные сферы")[0]
+    names = re.findall(r"\[\[(Помощник — [^\]]+)\]\]", prio)
+    assert names, r.stdout[:500]
+    for n in names:
+        assert n.replace("Помощник — ", "").lower() in txt, f"нет на странице: {n}"
+    shown = s.page.locator(".card.pom b").all_inner_texts()
+    assert len(shown) == len(names), (shown, names)
+    s.snimok(snimki, "shag")
+    name = names[0]
+    s.page.locator(".card.pom", has_text=name.replace("Помощник — ", "")).get_by_text("Взять в Путь").click()
+    s.ждать_записи(1)
+    fp, msg = s.gh.commits[0]
+    r = subprocess.run([sys.executable, ".github/scripts/sled_shag.py", "--vzyat", name], cwd=d, capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout
+    want = (d / fp).read_text(encoding="utf-8")
+    assert s.gh.files[fp] == want, f"файл шага не как у sled_shag.py:\n{s.gh.files[fp]}\n---\n{want}"
+    s.ждать_текст("в «пути»")
+    import shutil
+    shutil.rmtree(d.parent)
+    assert not s.errors, s.errors
+
+
 PROVERKI = {k[2:]: v for k, v in list(globals().items()) if k.startswith("t_")}
 
 
