@@ -17,6 +17,10 @@
   • замеры       — список `замеры`: "Что, единица: число" или "нет". Пишет `расчёт`: индекс массы тела,
                    талия к росту, доля жира по способу ВМС США (US Navy, мужчины: 86,010·lg(талия − шея)
                    − 70,041·lg(рост) + 36,76, всё в дюймах). Нет нужных замеров — «нет».
+Питомцы (модуль «Питомцы», CLAUDE.md, п. 5.2): медкарта питомца — подпапка с его именем в «Медкарте» сферы 07,
+у каждого файла свойство `питомец` — ссылка на карточку в «40 Люди» (`тип: питомец`). Проверяет, что карточка есть;
+у замеров питомца человеческий расчёт (`расчёт`) не делается; если у карточки заполнено `до` (питомца не стало),
+предупреждения о сроках его обследований не показываются.
 Округление процентов и расчётов — как у Шкалы: ,5 вниз (shkala.rnd).
 Код выхода 1 — ошибка формы.
 """
@@ -32,6 +36,7 @@ from shkala import FM, read_fm, write_fm, rnd, num  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 SPHERES = ROOT / "10 Сферы"
+PEOPLE = ROOT / "40 Люди"
 PROBLEM = ("открыто", "лечится", "наблюдение", "закрыто")
 STATE = ("не беспокоит", "беспокоит", "наблюдение", "не знаю")
 MONTH = re.compile(r"^(\d{4})-(\d{2})(?:-(\d{2}))?$")
@@ -140,25 +145,56 @@ def measures(path, fm, errors):
             f"Доля жира, %: {'нет' if fat is None else rnd(fat)}"]
 
 
+def pets():
+    """Карточки питомцев из «40 Люди»: имя файла → шапка."""
+    res = {}
+    for p in sorted(PEOPLE.glob("*.md")) if PEOPLE.exists() else []:
+        fm = read_fm(p.read_text(encoding="utf-8"))
+        if fm.get("тип") == "питомец":
+            res[p.stem] = fm
+    return res
+
+
+def link_name(v):
+    if isinstance(v, list):
+        v = v[0] if v else ""
+    v = (v or "").strip().strip('"')
+    if v.startswith("[[") and v.endswith("]]"):
+        v = v[2:-2].split("|")[0].split("#")[0]
+    return v.strip()
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--write", action="store_true")
     a = ap.parse_args()
     errors, warnings, today = [], [], datetime.date.today()
     files = sorted(p for p in SPHERES.glob("*/Медкарта/**/*.md"))
+    known_pets = pets()
     for p in files:
         text = p.read_text(encoding="utf-8")
         fm = read_fm(text)
         kind = fm.get("тип")
         values, after = None, None
+        pet = link_name(fm.get("питомец"))
+        quiet = False  # питомца не стало — сроки не напоминаем
+        if pet:
+            if pet not in known_pets:
+                warnings.append(f"{p.name}: `питомец` «{pet}» — нет карточки в «40 Люди» с `тип: питомец`")
+            else:
+                quiet = bool(link_name(known_pets[pet].get("до")))
+        elif p.relative_to(SPHERES).parts[0].startswith("07 ") and kind not in ("медкарта", None):
+            warnings.append(f"{p.name}: файл медкарты питомцев без свойства `питомец`")
+        mark = f"{pet} / " if pet else ""
+        w_before = len(warnings)
         if kind == "проблема":
             st = fm.get("статус")
             if st not in PROBLEM:
                 errors.append(f"{p.name}: статус «{st}», нужно одно из: {', '.join(PROBLEM)}")
-            print(f"• {p.stem}: {st}")
+            print(f"• {mark}{p.stem}: {st}")
         elif kind == "обследование":
             nxt = next_check(p, fm, errors, warnings, today)
-            print(f"• {p.stem}: следующее {nxt}")
+            print(f"• {mark}{p.stem}: следующее {nxt}")
             values, after = {"следующее": f'"{nxt}"'} if nxt else None, "последнее"
         elif kind == "карта тела":
             res = body_map(p, text, errors, warnings)
@@ -166,10 +202,14 @@ def main():
                 print(f"• {p.stem}: пунктов {res['пунктов']}, здоров {res['здоров']} %, отмечено {res['отмечено']} %, "
                       f"проверено {res['проверено']} %, беспокоит {res['беспокоит']}")
                 values, after = res, "луч"
+        elif kind == "замеры" and pet:
+            print(f"• {mark}{p.stem}: " + "; ".join(x for x in (fm.get("замеры") or []) if isinstance(x, str)))
         elif kind == "замеры":
             calc = measures(p, fm, errors)
             print(f"• {p.stem}: " + "; ".join(calc))
             values, after = {"расчёт": calc}, "измерено"
+        if quiet:
+            del warnings[w_before:]
         if a.write and values:
             if write_fm(p, values, after=after):
                 print("   записано:", p.stem)
