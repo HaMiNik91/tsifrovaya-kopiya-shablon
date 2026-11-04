@@ -413,6 +413,45 @@ def t_shag(ctx, port, snimki):
     assert not s.errors, s.errors
 
 
+def t_nedelya(ctx, port, snimki):
+    """«Эта неделя»: +30 мин создаёт план недели и пишет `сделано` (читает nedelya.py), файл календаря .ics."""
+    import datetime
+    g = Gh()
+    nach = {}
+    for nn, prio, chasy in (("01 Здоровье и молодость", 1, 2), ("10 Финансы", 2, 1.5)):
+        f = f"10 Сферы/{nn}/{nn[:2]} Шкала.md"
+        t = re.sub(r"^приоритет:.*$", f"приоритет: {prio}", g.files[f], count=1, flags=re.M)
+        nach[f] = re.sub(r"^часы:.*$", f"часы: {chasy}", t, count=1, flags=re.M)
+    s = Sayt(ctx, port, nach).open()
+    s.go("#/nedelya")
+    s.ждать_текст("+30 мин")
+    s.snimok(snimki, "nedelya-pusto")
+    plus = s.page.locator("[data-act='nedelya:add'][data-nn='01'][data-h='0.5']")
+    plus.click(); s.ждать_записи(2)
+    plus.click(); s.ждать_записи(3)
+    s.page.locator("[data-act='nedelya:add'][data-nn='10'][data-h='0.5']").click(); s.ждать_записи(4)
+    s.page.locator("[data-act='nedelya:add'][data-nn='01'][data-h='-0.5']").click(); s.ждать_записи(5)
+    mon = datetime.date.today() - datetime.timedelta(days=datetime.date.today().weekday())
+    fp = f"20 Журнал/{mon.isoformat()} План недели.md"
+    assert s.gh.commits[0][0] == fp, s.gh.commits
+    sd = fm_get(s.gh.files[fp], "сделано")
+    assert sd == ["01 Здоровье и молодость: 0,5", "10 Финансы: 0,5"], sd
+    assert "# План недели " in s.gh.files[fp]
+    s.ждать_текст("1 ч из 3,5 ч плана")
+    s.programmy("nedelya.py")
+    s.click("Добавить блоки в календарь")
+    s.ждать_текст("Скачать файл календаря")
+    with s.page.expect_download() as dl:
+        s.click("Скачать файл календаря")
+    ics = pathlib.Path(dl.value.path()).read_text(encoding="utf-8")
+    left = 7 - datetime.date.today().weekday()
+    assert ics.startswith("BEGIN:VCALENDAR") and ics.count("BEGIN:VEVENT") == 4, ics[:400]   # 2 ч + 1,5 ч блоками по 60 мин
+    assert "Блок внимания: Здоровье и молодость" in ics.replace("\r\n ", "")
+    s.snimok(snimki, "nedelya")
+    assert left >= 1
+    assert not s.errors, s.errors
+
+
 PROVERKI = {k[2:]: v for k, v in list(globals().items()) if k.startswith("t_")}
 
 
