@@ -17,13 +17,35 @@
   const amount = s => { const v = parseFloat(String(s).replace(/[\s €]/g, '').replace(',', '.')); return isFinite(v) ? Math.round(v * 100) / 100 : NaN; };
   const money = v => { const s = Math.abs(v).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ' ').replace('.', ','); return (v < 0 ? '−' : '') + s.replace(/,00$/, ''); };
   const cellSum = v => v.toFixed(2).replace('.', ',').replace(/,00$/, '');
+  // валюты (апгрейд 5.1): `валюта` — основная, `курсы` — «USD: 0,92 · ГГГГ-ММ-ДД», счёт «Название: вид · USD»
+  const SYM = {EUR: '€', USD: '$', GBP: '£', RUB: '₽', UAH: '₴', KZT: '₸', TRY: '₺', JPY: '¥', CNY: '¥'};
+  const CURS = ['EUR', 'USD', 'RUB', 'GBP', 'UAH', 'KZT', 'TRY', 'CHF', 'PLN', 'CNY'];
+  const sym = c => SYM[c] || c;
+  function fmList(t, key, add){ // дописать строку в свойство-список шапки (`key: []` или `key:` тоже годятся)
+    const m = t.match(FM), L = m[1].split('\n'); let i = L.findIndex(l => !l.startsWith(' ') && l.split(':')[0].trim() === key);
+    if (i < 0){ L.push(`${key}:`); i = L.length - 1; }
+    L[i] = `${key}:`; let j = i + 1; while (j < L.length && /^\s+-\s/.test(L[j])) j++;
+    L.splice(j, 0, `  - "${add}"`);
+    return `---\n${L.join('\n')}\n---\n` + t.slice(m[0].length);
+  }
 
   function settings(){
     const p = S.paths.find(x => isDen(x) && readFm(view(x) || '')['тип'] === 'деньги');
     if (!p) return null;
-    const fm = readFm(view(p)), acc = [];
-    for (const l of (Array.isArray(fm['счета']) ? fm['счета'] : [])){ const i = l.lastIndexOf(':'); if (i > 0) acc.push({name: l.slice(0, i).trim(), kind: l.slice(i + 1).trim()}); }
-    return {path: p, dir: p.split('/').slice(0, 3).join('/'), acc, budget: fm['бюджет'] || 'личный'};
+    const fm = readFm(view(p)), acc = [], cur = String(Array.isArray(fm['валюта']) ? '' : fm['валюта'] || '').trim().toUpperCase();
+    const osn = /^[A-Z]{3}$/.test(cur) ? cur : 'EUR';
+    for (const l of (Array.isArray(fm['счета']) ? fm['счета'] : [])){
+      const i = l.lastIndexOf(':'); if (i <= 0) continue;
+      const [kind, c] = l.slice(i + 1).split('·').map(x => x.trim());
+      acc.push({name: l.slice(0, i).trim(), kind, cur: c ? c.toUpperCase() : osn});
+    }
+    const rates = {};
+    for (const l of (Array.isArray(fm['курсы']) ? fm['курсы'] : [])){
+      const m = l.match(/^([A-Za-z]{3})\s*:\s*([\d.,\s]+?)\s*(?:·\s*(\d{4}-\d\d-\d\d))?$/); if (!m) continue;
+      (rates[m[1].toUpperCase()] = rates[m[1].toUpperCase()] || []).push({d: m[3] || '1900-01-01', v: amount(m[2])});
+    }
+    for (const k in rates) rates[k].sort((a, b) => a.d.localeCompare(b.d));
+    return {path: p, dir: p.split('/').slice(0, 3).join('/'), acc, budget: fm['бюджет'] || 'личный', osn, chosen: !!cur, rates};
   }
   const months = () => S.paths.filter(p => isDen(p) && readFm(view(p) || '')['тип'] === 'деньги-месяц').map(p => ({p, ym: readFm(view(p))['месяц']})).filter(x => /^\d{4}-\d\d$/.test(x.ym)).sort((a, b) => a.ym.localeCompare(b.ym));
   function rows(text, title){ // строки таблицы раздела «## title»
@@ -73,6 +95,10 @@
     h += `<div class="head"><div class="big" style="font-size:34px">${text ? n(fm['расход']) : '—'}<small>расход</small></div><div><h1>Деньги — ${esc(ymLabel(ym))}</h1><div class="sub">Доход ${text ? n(fm['доход']) : '—'}${fm['неучтено'] && !Array.isArray(fm['неучтено']) ? ` · неучтено ${n(fm['неучтено'])}` : ''}</div></div></div>`;
     h += `<div class="pick"><button class="btn" data-act="dengi:ym" data-v="${ymAdd(ym, -1)}">‹ ${esc(ymLabel(ymAdd(ym, -1)))}</button>${ym !== ymNow() ? `<button class="btn" data-act="dengi:ym" data-v="${ymNow()}">Этот месяц</button>` : ''}${ym < ymNow() ? `<button class="btn" data-act="dengi:ym" data-v="${ymAdd(ym, 1)}">${esc(ymLabel(ymAdd(ym, 1)))} ›</button>` : ''}</div>`;
     if (S.mode !== 'live') h += `<div class="note">Демо: записи здесь не сохраняются.</div>`;
+    if (!set.chosen) h += `<div class="step"><b class="t">Основная валюта</b><p class="desc" style="color:inherit">В какой валюте считать все итоги? Другие валюты можно добавить потом — у счёта.</p>
+      <div class="pick">${CURS.slice(0, 4).map(c => `<button class="btn" data-act="dengi:osn" data-v="${c}">${c} ${sym(c)}</button>`).join('')}</div>
+      <label>Другая — код из трёх латинских букв<input type="text" id="dnOsn" maxlength="3" placeholder="например, PLN" autocapitalize="characters"></label>
+      <div class="pick"><button class="btn" data-act="dengi:osn" data-v="">Выбрать</button></div></div>`;
     if (!set.acc.length) h += `<div class="note">Сначала добавьте счёт — внизу, «Счета».</div>`;
     const first = !M.length;
     // форма записи
@@ -82,7 +108,8 @@
     const ops = rows(text, 'Операции');
     if (ops.length){
       h += `<div class="card"><h2>Операции: ${ops.length}</h2><div class="ops">` + [...ops].reverse().slice(0, st.all ? 999 : 12).map(r => {
-        const [d, s, f, t, w] = r.c, out = /^Расход/.test(t), inn = /^(Доход|Возврат)/.test(f);
+        const [d, s0, f, t, w] = r.c, out = /^Расход/.test(t), inn = /^(Доход|Возврат)/.test(f);
+        const ac = set.acc.find(a => a.name === (out || !inn ? f : t)), s = /[A-Z]{3}/.test(s0) ? s0.replace(/\b([A-Z]{3})\b/g, (_, c) => sym(c)) : s0 + (ac && ac.cur !== set.osn ? ' ' + sym(ac.cur) : '');
         return `<div class="op"><span class="legend">${esc(d.slice(8))}.${esc(d.slice(5, 7))}</span><span><b>${esc((out ? t : inn ? f : `${f} → ${t}`).replace(/^(Расход|Доход|Возврат):\s*/, ''))}</b>${w ? ` <span class="legend">${esc(w)}</span>` : ''}<br><span class="legend">${esc(out ? f : inn ? t : 'перевод')}</span></span><span class="num ${out ? 'minus' : inn ? 'plus' : ''}">${out ? '−' : inn ? '+' : ''}${esc(s)}</span><button class="icon" data-act="dengi:del" data-ym="${ym}" data-line="${esc(r.line)}" aria-label="Удалить строку">✕</button></div>`;
       }).join('') + `</div>${ops.length > 12 && !st.all ? `<button class="btn" data-act="dengi:all">Показать все</button>` : ''}</div>`;
     } else if (text) h += `<p class="legend">В этом месяце операций пока нет.</p>`;
@@ -95,20 +122,30 @@
     // сверка
     if (set.acc.length && text) h += `<details><summary>Сверка: сколько по факту на счетах</summary><div style="display:grid;gap:10px;margin-top:8px">
       <p class="legend">Раз в месяц впишите, сколько денег на самом деле на каждом счёте. Разницу с посчитанным программа запишет как «неучтённое».</p>
-      ${set.acc.map(a => `<label>${esc(a.name)} <span class="legend">${esc(a.kind)}</span><input type="text" inputmode="decimal" data-sv="${esc(a.name)}" placeholder="например, 1520,40"></label>`).join('')}
+      ${set.acc.map(a => `<label>${esc(a.name)} <span class="legend">${esc(a.kind)}, ${esc(sym(a.cur))}</span><input type="text" inputmode="decimal" data-sv="${esc(a.name)}" placeholder="например, 1520,40"></label>`).join('')}
       <div class="pick"><button class="btn main" data-act="dengi:sverka" data-ym="${ym}">Записать сверку</button></div></div></details>`;
     // счета
     h += `<details ${set.acc.length ? '' : 'open'}><summary>Счета: ${set.acc.length}</summary><div style="display:grid;gap:10px;margin-top:8px">
-      <p class="desc">${set.acc.map(a => `${esc(a.name)} — ${esc(a.kind)}`).join(' · ') || 'Счетов пока нет.'}</p>
+      <p class="desc">${set.acc.map(a => `${esc(a.name)} — ${esc(a.kind)}${a.cur !== set.osn ? `, ${esc(a.cur)}` : ''}`).join(' · ') || 'Счетов пока нет.'}</p>
       <label>Новый счёт — название<input type="text" id="dnAcc" placeholder="например, Карта, Кошелёк, Копилка"></label>
       <label>Вид</label><div class="pick" role="group">${KINDS.map(k => `<button class="btn ${(st.kind || 'банк') === k ? 'on' : ''}" data-act="dengi:kind" data-v="${k}">${k}</button>`).join('')}</div>
       <p class="legend">наличные · банк · баланс (ваши деньги у другого) · долг (вам должны) · запас.</p>
+      <label>Валюта счёта<select id="dnAccCur">${[set.osn, ...CURS.filter(c => c !== set.osn)].map(c => `<option value="${c}">${c} ${esc(sym(c))}${c === set.osn ? ' — основная' : ''}</option>`).join('')}</select></label>
       <div class="pick"><button class="btn" data-act="dengi:acc">Добавить счёт</button></div></div></details>`;
+    // курсы других валют
+    const other = [...new Set(set.acc.map(a => a.cur).filter(c => c !== set.osn))];
+    if (other.length) h += `<details ${other.some(c => !set.rates[c]) ? 'open' : ''}><summary>Курсы валют</summary><div style="display:grid;gap:10px;margin-top:8px">
+      ${other.map(c => { const r = set.rates[c], last = r && r[r.length - 1];
+        return `<p class="desc">${last ? `1 ${c} = ${esc(String(last.v).replace('.', ','))} ${esc(sym(set.osn))} <span class="legend">с ${esc(last.d === '1900-01-01' ? 'начала' : last.d)}</span>` : `<b>${c}: курса нет</b> — без него итоги неверные`}</p>`; }).join('')}
+      <label>Новый курс</label><div class="pick" style="align-items:center"><span>1</span><select id="dnRateCur" style="width:auto">${other.map(c => `<option>${c}</option>`).join('')}</select><span>=</span><input type="text" inputmode="decimal" id="dnRate" style="width:110px" placeholder="0,92"><span>${esc(sym(set.osn))}</span></div>
+      <label>С какого дня<input type="date" id="dnRateDate" value="${today()}"></label>
+      <div class="pick"><button class="btn" data-act="dengi:rate">Записать курс</button></div>
+      <p class="legend">Курс поменялся — запишите новый: прошлые операции считаются по курсу своего дня.</p></div></details>`;
     return h + `<p class="legend">Перевод между своими счетами — не доход и не расход. Номера карт и счетов сюда не пишутся.</p>`;
   }
   function startForm(set){
     return `<div class="step"><b class="t">Начало учёта</b><p class="desc" style="color:inherit">Сколько денег сейчас на каждом счёте? Это точка отсчёта; дальше остатки программа считает сама.</p>
-      ${set.acc.map(a => `<label>${esc(a.name)} <span class="legend">${esc(a.kind)}</span><input type="text" inputmode="decimal" data-st="${esc(a.name)}" placeholder="0"></label>`).join('')}
+      ${set.acc.map(a => `<label>${esc(a.name)} <span class="legend">${esc(a.kind)}, ${esc(sym(a.cur))}</span><input type="text" inputmode="decimal" data-st="${esc(a.name)}" placeholder="0"></label>`).join('')}
       <div class="pick"><button class="btn main" data-act="dengi:start">Начать учёт</button></div></div>`;
   }
   function opForm(set, ym){
@@ -116,9 +153,11 @@
     const stat = v === 'rash' || v === 'voz' ? statyi('Расход').concat(statyi('Возврат')) : statyi('Доход');
     const d = ym === ymNow() ? today() : `${ym}-01`;
     let f = `<div class="card"><h2>Записать</h2><div class="pick" role="group">${Object.entries(VIDY).map(([k, n]) => `<button class="btn ${v === k ? 'on' : ''}" data-act="dengi:vid" data-v="${k}">${n}</button>`).join('')}</div>`;
-    f += `<label>Сумма<input type="text" inputmode="decimal" id="dnSum" placeholder="например, 12,50" autocomplete="off"></label>`;
-    if (v === 'per') f += `<label>Откуда<select id="dnFrom">${acc}</select></label><label>Куда<select id="dnTo">${set.acc.map((a, i) => `<option ${i === 1 ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select></label>`;
-    else f += `<label>${v === 'rash' ? 'С какого счёта' : 'На какой счёт'}<select id="dnAcc2">${acc}</select></label>
+    const c0 = set.acc[0].cur;
+    f += `<label><span>Сумма, <span id="dnCur">${esc(sym(c0))}</span></span><input type="text" inputmode="decimal" id="dnSum" placeholder="например, 12,50" autocomplete="off"></label>`;
+    if (v === 'per') f += `<label>Откуда<select id="dnFrom" data-ch="dengi:accsel">${acc}</select></label><label>Куда<select id="dnTo" data-ch="dengi:accsel">${set.acc.map((a, i) => `<option ${i === 1 ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select></label>
+      <label id="dnSum2w" hidden><span>Сколько пришло, <span id="dnCur2"></span></span><input type="text" inputmode="decimal" id="dnSum2" placeholder="пусто — по курсу" autocomplete="off"></label>`;
+    else f += `<label>${v === 'rash' ? 'С какого счёта' : 'На какой счёт'}<select id="dnAcc2" data-ch="dengi:accsel">${acc}</select></label>
       <label>${v === 'doh' ? 'Откуда доход (статья)' : 'Статья расхода'}<input type="text" id="dnStat" list="dnStatList" placeholder="${v === 'doh' ? 'например, Зарплата' : 'например, Еда'}" autocomplete="off"><datalist id="dnStatList">${stat.map(x => `<option value="${esc(x)}">`).join('')}</datalist></label>`;
     if (set.budget !== 'личный' && v === 'rash') f += `<label>Чей расход</label><div class="pick" role="group">${['моё', 'общее', 'партнёра'].map(x => `<button class="btn ${(st.whose || 'моё') === x ? 'on' : ''}" data-act="dengi:whose" data-v="${x}">${x}</button>`).join('')}</div>`;
     f += `<label>Что (по желанию)<input type="text" id="dnWhat" placeholder="коротко" autocomplete="off"></label>
@@ -152,9 +191,12 @@
           const end = `${VIDY[st.vid]}: ${stat}${mark}`, acc = val('dnAcc2');
           [from, to] = st.vid === 'rash' ? [acc, end] : [end, acc];
         }
-        const row = `| ${d} | ${cellSum(s)} | ${clean(from)} | ${clean(to)} | ${what} |`;
+        const fa = set.acc.find(x => x.name === from), ta = set.acc.find(x => x.name === to), ac = fa || ta;
+        let cell = cellSum(s) + (ac && ac.cur !== set.osn ? ` ${ac.cur}` : '');
+        if (fa && ta && fa.cur !== ta.cur){ const s2 = amount(val('dnSum2')); if (val('dnSum2').trim() && !(s2 > 0)){ toast('Сколько пришло — число'); return; } cell = `${cellSum(s)} ${fa.cur}` + (s2 > 0 ? ` → ${cellSum(s2)}` : ''); }
+        const row = `| ${d} | ${cell} | ${clean(from)} | ${clean(to)} | ${what} |`;
         write(set, ym, t => stamp(addRow(t, 'Операции', row), today()), `Деньги: ${clean(from)} → ${clean(to)} ${cellSum(s)}`);
-        toast(`Записано: ${money(s)}`); return;
+        toast(`Записано: ${money(s)} ${sym(ac ? ac.cur : set.osn)}`); return;
       }
       if (a === 'del'){
         if (!confirm('Удалить эту строку из учёта?')) return;
@@ -182,18 +224,39 @@
         toast('Сверка записана'); return;
       }
       if (a === 'acc'){
-        const name = clean(val('dnAcc')).replace(/:/g, ' '), kind = st.kind || 'банк';
+        const name = clean(val('dnAcc')).replace(/[:·]/g, ' '), kind = st.kind || 'банк', cur = val('dnAccCur') || set.osn;
         if (!name){ toast('Название счёта'); return; }
         if (set.acc.some(x => x.name.toLowerCase() === name.toLowerCase())){ toast('Такой счёт уже есть'); return; }
         change(set.path, {type: 'fn', fn: t => {
           const m = t.match(FM), L = m[1].split('\n'); let i = L.findIndex(l => l.split(':')[0].trim() === 'счета' && !l.startsWith(' '));
           if (i < 0) throw new Error('в настройках нет свойства `счета`');
           L[i] = 'счета:'; let j = i + 1; while (j < L.length && /^\s+-\s/.test(L[j])) j++;
-          L.splice(j, 0, `  - "${name}: ${kind}"`);
+          L.splice(j, 0, `  - "${name}: ${kind}${cur !== set.osn ? ` · ${cur}` : ''}"`);
           return stamp(`---\n${L.join('\n')}\n---\n` + t.slice(m[0].length), today());
         }}, `Деньги: новый счёт ${name}`);
         toast(`Счёт «${name}» добавлен`); return;
       }
+      if (a === 'osn'){
+        const c = (b.dataset.v || val('dnOsn')).trim().toUpperCase();
+        if (!/^[A-Z]{3}$/.test(c)){ toast('Код валюты — три латинские буквы, например PLN'); return; }
+        change(set.path, {type: 'fm', sets: [['валюта', c, 'регулярно']], date: today()}, `Деньги: основная валюта ${c}`);
+        toast(`Основная валюта — ${c}`); return;
+      }
+      if (a === 'rate'){
+        const c = val('dnRateCur'), v = amount(val('dnRate')), d = val('dnRateDate');
+        if (!(v > 0)){ toast('Курс — число, например 0,92'); return; }
+        if (!/^\d{4}-\d\d-\d\d$/.test(d)){ toast('Дата курса'); return; }
+        change(set.path, {type: 'fn', fn: t => stamp(fmList(t, 'курсы', `${c}: ${String(v).replace('.', ',')} · ${d}`), today())}, `Деньги: курс ${c} ${v} с ${d}`);
+        toast(`1 ${c} = ${String(v).replace('.', ',')} ${sym(set.osn)}`); return;
+      }
+    },
+    change(a){ // выбран другой счёт — подписи валют; перевод в другую валюту — поле «сколько пришло»
+      if (a !== 'accsel') return;
+      const set = settings(), cur = n => (set.acc.find(x => x.name === val(n)) || {}).cur || set.osn;
+      const f = document.getElementById('dnFrom') ? cur('dnFrom') : cur('dnAcc2');
+      document.getElementById('dnCur').textContent = sym(f);
+      const w = document.getElementById('dnSum2w');
+      if (w){ const tc = cur('dnTo'); w.hidden = tc === f; document.getElementById('dnCur2').textContent = sym(tc); }
     },
   };
 })();

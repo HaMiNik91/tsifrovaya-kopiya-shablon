@@ -17,6 +17,11 @@
 - Сверка: остаток по факту против посчитанного на конец того дня; разница — «неучтено».
 - Прогноз: регулярные операции из настроек, которых ещё нет в текущем месяце, и следующие 3 месяца;
   предупреждение, если счёт уходит в минус.
+- Валюты (апгрейд 5.1, одобрено 04.11.2026): `валюта` — основная (все итоги в ней; пусто — EUR);
+  у счёта в другой валюте — пометка в той же строке «Название: вид · USD»; `курсы` — строки «USD: 0,92 · ГГГГ-ММ-ДД»
+  (сколько основной валюты за 1 единицу, с этой даты; новый курс — новая строка). Сумма операции — в валюте счёта;
+  перевод между счетами в разных валютах — двумя суммами «100 USD → 92» (сколько ушло → сколько пришло),
+  одной суммой — пересчёт по курсу на день операции. Остатки счетов — в их валюте, «Всего» — в основной.
 
 Запуск:
   python3 .github/scripts/dengi.py           — проверка и отчёт, ничего не пишет
@@ -51,9 +56,21 @@ def money(x):
     return ("−" if x < -0.004 else "") + s
 
 
+SYMBOLS = {"EUR": "€", "USD": "$", "GBP": "£", "RUB": "₽", "UAH": "₴", "KZT": "₸", "TRY": "₺", "JPY": "¥", "CNY": "¥"}
+CUR = re.compile(r"^[A-Z]{3}$")
+
+
 def to_amount(s):
-    s = s.replace(" ", "").replace(" ", "").replace("€", "").replace(",", ".")
+    s = re.sub(r"[A-Z]{3}", "", s)
+    s = s.replace(" ", "").replace("\u00a0", "").replace("\u202f", "").replace("€", "").replace(",", ".")
     return float(s)
+
+
+def sum_cell(s):
+    """«12,50» → (12.5, None, None); «100 USD» → (100, "USD", None); «100 USD → 92» → (100, "USD", 92)."""
+    left, _, right = s.partition("→")
+    m = re.search(r"\b([A-Z]{3})\b", left)
+    return to_amount(left), (m.group(1) if m else None), (to_amount(right) if right.strip() else None)
 
 
 def to_date(s):
@@ -130,15 +147,60 @@ def main():
     if len(sets) > 1:
         errors.append("✖ файлов настроек (тип: деньги) больше одного: " + ", ".join(p.name for p, _ in sets))
     sp, sfm = sets[0]
-    accounts = {}
+    osn = (sfm.get("валюта") or "EUR").strip().upper()
+    if not CUR.match(osn):
+        errors.append(f"✖ {sp.name}: `валюта` — код из трёх латинских букв (EUR, USD, RUB…)")
+        osn = "EUR"
+    accounts, acur = {}, {}
     for line in sfm.get("счета") or []:
         if ":" not in line:
             errors.append(f"✖ {sp.name}: счёт «{line}» — нужно «Название: вид»")
             continue
         name, kind = (x.strip() for x in line.rsplit(":", 1))
+        cur = osn
+        if "·" in kind:
+            kind, cur = (x.strip() for x in kind.split("·", 1))
+            cur = cur.upper()
+            if not CUR.match(cur):
+                errors.append(f"✖ {sp.name}: счёт «{name}» — валюта «{cur}», нужен код из трёх латинских букв")
+                cur = osn
         if kind not in KINDS:
             errors.append(f"✖ {sp.name}: счёт «{name}» — вид «{kind}», а можно: {', '.join(KINDS)}")
         accounts[name] = kind
+        acur[name] = cur
+    rates = {}   # валюта → [(дата, курс)] по возрастанию даты
+    for line in sfm.get("курсы") or []:
+        m = re.match(r"^([A-Za-z]{3})\s*:\s*([\d.,\s]+?)\s*(?:·\s*(\d{4}-\d{2}-\d{2}))?$", line.strip())
+        if not m:
+            errors.append(f"✖ {sp.name}: курс «{line}» — нужно «USD: 0,92 · ГГГГ-ММ-ДД»")
+            continue
+        try:
+            v = to_amount(m.group(2))
+        except ValueError:
+            errors.append(f"✖ {sp.name}: курс «{line}» — не число")
+            continue
+        d = to_date(m.group(3)) if m.group(3) else datetime.date(1900, 1, 1)
+        rates.setdefault(m.group(1).upper(), []).append((d, v))
+    for v in rates.values():
+        v.sort()
+    for cur in sorted(set(acur.values()) - {osn}):
+        if cur not in rates:
+            errors.append(f"✖ {sp.name}: для валюты {cur} нет курса в `курсы` («{cur}: 0,92 · ГГГГ-ММ-ДД»)")
+    single = set(acur.values()) <= {osn} and not rates
+    sym = SYMBOLS.get(osn, osn)
+
+    def rate(cur, d):
+        """Сколько основной валюты за 1 единицу cur на день d (последний курс не позже d, иначе самый ранний)."""
+        if cur == osn:
+            return 1.0
+        rs = rates.get(cur)
+        if not rs:
+            return 1.0
+        ok = [v for dd, v in rs if dd <= d]
+        return ok[-1] if ok else rs[0][1]
+
+    def money_c(v, cur):
+        return money(v) + ("" if cur == osn and single else f" {SYMBOLS.get(cur, cur)}")
     if sfm.get("бюджет") not in ("личный", "общий", "смешанный"):
         errors.append(f"✖ {sp.name}: `бюджет` — личный, общий или смешанный")
     try:
@@ -172,12 +234,13 @@ def main():
             return None
         if ym and d.strftime("%Y-%m") != ym:
             errors.append(f"✖ {where}: дата {d} не из месяца {ym}")
+        raw_s = s
         try:
-            s = to_amount(s)
+            s, scur, s2 = sum_cell(str(s))
         except ValueError:
-            errors.append(f"✖ {where}: сумма «{s}» — не число")
+            errors.append(f"✖ {where}: сумма «{raw_s}» — не число")
             return None
-        if s <= 0:
+        if s <= 0 or (s2 is not None and s2 <= 0):
             errors.append(f"✖ {where}: сумма должна быть больше нуля")
         fe, te = end_point(f, accounts), end_point(t, accounts)
         ok = {("доход", "счёт"), ("возврат", "счёт"), ("счёт", "расход"), ("счёт", "счёт")}
@@ -190,10 +253,22 @@ def main():
             return None
         if fe == te:
             errors.append(f"✖ {where}: откуда и куда совпадают")
-        return {"date": d, "sum": s, "from": fe, "to": te, "what": what}
+        fcur = acur[fe[1]] if fe[0] == "счёт" else None
+        tcur = acur[te[1]] if te[0] == "счёт" else None
+        cur = fcur or tcur
+        if scur and scur != cur:
+            errors.append(f"✖ {where}: сумма в {scur}, а счёт «{fe[1] if fcur else te[1]}» — в {cur} (сумма пишется в валюте счёта)")
+            return None
+        if s2 is not None and not (fcur and tcur):
+            errors.append(f"✖ {where}: две суммы «→» — только для перевода между счетами в разных валютах")
+            return None
+        s_to = s
+        if fcur and tcur and fcur != tcur:
+            s_to = s2 if s2 is not None else s * rate(fcur, d) / rate(tcur, d)
+        return {"date": d, "sum": s, "sum_to": s_to, "osn": s * rate(cur, d), "from": fe, "to": te, "what": what}
 
     for r in regular:
-        r["op"] = check_op(f"{sp.name}, регулярно", f"2000-01-{min(r['day'], 28):02d}",
+        r["op"] = check_op(f"{sp.name}, регулярно", today.isoformat(),
                            str(r["sum"]), r["from"], r["to"], r["what"], None)
 
     bal = None          # остатки на текущий момент
@@ -264,7 +339,7 @@ def main():
 
         for op in ops:
             run_checks(op["date"])
-            s, (fk, fn, fmk), (tk, tn, tmk) = op["sum"], op["from"], op["to"]
+            s, (fk, fn, fmk), (tk, tn, tmk) = op["osn"], op["from"], op["to"]
             if fk == "доход":
                 key = fn + (f" ({fmk})" if fmk else "")
                 inc[key] = inc.get(key, 0) + s
@@ -278,17 +353,18 @@ def main():
                     shared[tn] = shared.get(tn, 0) + s
             if op["date"] >= (opened or op["date"]):
                 if fk == "счёт":
-                    bal[fn] -= s
+                    bal[fn] -= op["sum"]
                 if tk == "счёт":
-                    bal[tn] += s
+                    bal[tn] += op["sum_to"]
         run_checks(None)
         for k, v in ret.items():
             exp[k] = exp.get(k, 0) - v
         for d, acc, diff in diffs:
-            if diff < 0:
-                exp[f"неучтённое ({acc})"] = exp.get(f"неучтённое ({acc})", 0) - diff
+            b = diff * rate(acur[acc], d)
+            if b < 0:
+                exp[f"неучтённое ({acc})"] = exp.get(f"неучтённое ({acc})", 0) - b
             else:
-                inc[f"неучтённое ({acc})"] = inc.get(f"неучтённое ({acc})", 0) + diff
+                inc[f"неучтённое ({acc})"] = inc.get(f"неучтённое ({acc})", 0) + b
         report[ym] = {"p": p, "start": start, "end": dict(bal), "inc": inc, "exp": exp,
                       "shared": shared, "diffs": diffs, "ops": ops}
 
@@ -312,9 +388,9 @@ def main():
                 fk, fn, _ = r["op"]["from"]
                 tk, tn, _ = r["op"]["to"]
                 if fk == "счёт":
-                    fb[fn] -= r["sum"]
+                    fb[fn] -= r["op"]["sum"]
                 if tk == "счёт":
-                    fb[tn] += r["sum"]
+                    fb[tn] += r["op"]["sum_to"]
             neg = {a: v for a, v in fb.items() if v < -0.004}
             forecast.append((ym, dict(fb), neg))
             for a, v in neg.items():
@@ -334,7 +410,7 @@ def main():
         lines.append("")
         for title, d in (("Доходы", r["inc"]), ("Расходы", r["exp"])):
             if d:
-                lines.append(f"| {title} | € |")
+                lines.append(f"| {title} | {sym} |")
                 lines.append("|---|---|")
                 for k, v in sorted(d.items(), key=lambda x: -x[1]):
                     lines.append(f"| {k} | {money(v)} |")
@@ -342,9 +418,17 @@ def main():
         lines.append("| Счёт | Начало | Конец |")
         lines.append("|---|---|---|")
         for acc in accounts:
-            lines.append(f"| {acc} | {money(r['start'].get(acc, 0))} | {money(r['end'].get(acc, 0))} |")
-        tot = sum(r["end"].values())
-        lines.append(f"| **Всего** | {money(sum(r['start'].values()))} | {money(tot)} |")
+            c = acur[acc]
+            lines.append(f"| {acc} | {money_c(r['start'].get(acc, 0), c)} | {money_c(r['end'].get(acc, 0), c)} |")
+        d0, d1 = datetime.date.fromisoformat(ym + "-01"), datetime.date.fromisoformat(month_add(ym, 1) + "-01") - datetime.timedelta(days=1)
+        ts = sum(v * rate(acur[a], d0) for a, v in r["start"].items())
+        tot = sum(v * rate(acur[a], d1) for a, v in r["end"].items())
+        lines.append(f"| **Всего{'' if single else f', {sym}'}** | {money(ts)} | {money(tot)} |")
+        if not single:
+            used = sorted({acur[a] for a in accounts} - {osn})
+            if used:
+                lines.append("")
+                lines.append("*Курсы на конец месяца: " + ", ".join(f"1 {c} = {money(rate(c, d1))} {sym}" for c in used) + ".*")
         lines.append("")
         if r["diffs"]:
             lines.append("**Сверка:** " + "; ".join(
@@ -360,7 +444,7 @@ def main():
             for fym, fb, neg in fc:
                 yy, mm = fym.split("-")
                 lines.append(f"| {MONTHS[int(mm) - 1]} {yy} | " + " | ".join(
-                    (f"**{money(fb[a])}**" if a in neg else money(fb[a])) for a in shown) + " |")
+                    (f"**{money_c(fb[a], acur[a])}**" if a in neg else money_c(fb[a], acur[a])) for a in shown) + " |")
             lines.append("")
         lines.append(END)
         return lines
@@ -369,11 +453,11 @@ def main():
         y, m = ym.split("-")
         ti, te = sum(r["inc"].values()), sum(r["exp"].values())
         print(f"{MONTHS[int(m) - 1]} {y}: доход {money(ti)}, расход {money(te)}, "
-              f"всего на счетах {money(sum(r['end'].values()))}")
+              f"всего на счетах {money(sum(v * rate(acur[a], today) for a, v in r['end'].items()))}{'' if single else ' ' + osn}")
         if args.write:
             vals = {"доход": money(ti), "расход": money(te),
-                    "остатки": [f"{acc}: {money(v)}" for acc, v in r["end"].items()],
-                    "неучтено": [f"{d} {acc}: {money(v)}" for d, acc, v in r["diffs"]]}
+                    "остатки": [f"{acc}: {money_c(v, acur[acc])}" for acc, v in r["end"].items()],
+                    "неучтено": [f"{d} {acc}: {money_c(v, acur[acc])}" for d, acc, v in r["diffs"]]}
             changed = write_fm(r["p"], vals, "месяц")
             text = r["p"].read_text(encoding="utf-8")
             new = "\n".join(block(ym))

@@ -562,6 +562,53 @@ def t_dengi(ctx, port, snimki):
     assert not s.errors, s.errors
 
 
+def t_valyuty(ctx, port, snimki):
+    """Деньги с валютами: основная валюта, счёт в USD, курс, расход в USD, перевод «100 USD → 91» — dengi.py считает."""
+    s = Sayt(ctx, port).open()
+    s.go("#/dengi")
+    s.ждать_текст("Основная валюта")
+    s.click("[data-act='dengi:osn'][data-v='EUR']"); s.ждать_записи(1)
+    nas = next(p for p in s.gh.files if p.endswith("/Деньги/10 Деньги.md"))
+    assert fm_get(s.gh.files[nas], "валюта") == "EUR"
+    s.page.locator("details summary", has_text="Счета:").click()
+    s.page.fill("#dnAcc", "Revolut"); s.click("банк"); s.page.select_option("#dnAccCur", "USD"); s.click("Добавить счёт"); s.ждать_записи(2)
+    assert "Revolut: банк · USD" in s.gh.files[nas]
+    s.ждать_текст("USD: курса нет")
+    s.page.locator("details summary", has_text="Курсы валют").click() if not s.page.locator("#dnRate").is_visible() else None
+    s.page.fill("#dnRate", "0,92"); s.page.fill("#dnRateDate", "2026-01-01"); s.click("Записать курс"); s.ждать_записи(3)
+    assert "USD: 0,92 · 2026-01-01" in s.gh.files[nas], s.gh.files[nas][:600]
+    s.page.fill("[data-st='Банк']", "1000"); s.page.fill("[data-st='Revolut']", "200")
+    s.click("Начать учёт"); s.ждать_записи(5)
+    s.ждать_текст("Записать")
+    s.page.select_option("#dnAcc2", "Revolut")
+    assert s.page.inner_text("#dnCur") == "$", s.page.inner_text("#dnCur")
+    s.page.fill("#dnSum", "50"); s.page.fill("#dnStat", "Подписки")
+    s.page.locator("[data-act='dengi:add']").click(); s.ждать_записи(6)
+    s.click("Перевод")
+    s.page.select_option("#dnFrom", "Revolut"); s.page.select_option("#dnTo", "Банк")
+    assert s.page.locator("#dnSum2").is_visible(), "нет поля «сколько пришло»"
+    s.page.fill("#dnSum", "100"); s.page.fill("#dnSum2", "91")
+    s.page.locator("[data-act='dengi:add']").click(); s.ждать_записи(7)
+    import datetime
+    ym = datetime.date.today().strftime("%Y-%m")
+    fp = next(p for p in s.gh.files if p.endswith(f"/Деньги/10 {ym} Деньги.md"))
+    t = s.gh.files[fp]
+    assert "| 50 USD | Revolut | Расход: Подписки |" in t and "| 100 USD → 91 | Revolut | Банк |" in t and "| Revolut | 200 |" in t, t
+    d = kopiya({p: s.gh.files[p] for p, _ in s.gh.commits})
+    r = subprocess.run([sys.executable, ".github/scripts/dengi.py", "--write"], cwd=d, capture_output=True, text=True)
+    assert r.returncode == 0 and "✖" not in r.stdout, r.stdout
+    itog = (d / fp).read_text(encoding="utf-8")
+    assert "| Revolut | 200 $ | 50 $ |" in itog and "| Подписки | 46 |" in itog and "| Банк | 1 000 € | 1 091 € |" in itog, itog[itog.find("<!-- dengi"):]
+    s.gh.files[fp] = itog
+    s.go("#/dengi")
+    s.ждать_текст("Итоги месяца")
+    assert "−50 $" in s.page.inner_text(".ops"), s.page.inner_text(".ops")
+    s.snimok(snimki, "valyuty")
+    import shutil
+    shutil.rmtree(d.parent)
+    assert not s.errors, s.errors
+
+
 PROVERKI = {k[2:]: v for k, v in list(globals().items()) if k.startswith("t_")}
 
 
