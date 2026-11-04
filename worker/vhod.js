@@ -1,4 +1,4 @@
-// Помощник «Войти через GitHub» для страницы заполнения «Цифровой копии».
+// Помощник «Войти через GitHub» для страницы заполнения «Цифровой копии» (и форма «Предложить идею» — worker/idei.js).
 // Работает на Cloudflare Workers (бесплатный тариф). Делает две вещи:
 //  1) раздаёт саму страницу из папки docs (настройка "assets" в wrangler.jsonc);
 //  2) меняет одноразовый код от GitHub на ключ входа и продлевает ключ.
@@ -14,6 +14,8 @@
 // Настройки (vars в wrangler.jsonc): GITHUB_CLIENT_ID, GITHUB_APP_SLUG,
 // ALLOWED_ORIGINS — через запятую другие адреса страницы (например, GitHub Pages открытого шаблона).
 
+import {idei} from './idei.js';
+
 const GH_TOKEN_URL = 'https://github.com/login/oauth/access_token';
 const KEEP = ['access_token', 'expires_in', 'refresh_token', 'refresh_token_expires_in', 'token_type', 'error', 'error_description'];
 
@@ -21,6 +23,7 @@ export default {
   async fetch(req, env) {
     const url = new URL(req.url);
     if (url.pathname.startsWith('/vhod/')) return vhod(req, env, url);
+    if (url.pathname === '/idei' || url.pathname.startsWith('/idei/')) return idei(req, env, url, allowedOrigins(env, url)); // форма «Предложить идею»
     return env.ASSETS.fetch(req);
   },
 };

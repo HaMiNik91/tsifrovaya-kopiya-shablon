@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<!--CSP--><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https://api.github.com https://raw.githubusercontent.com; img-src 'self' data:"><!--/CSP-->
+<!--CSP--><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https://api.github.com https://raw.githubusercontent.com https://challenges.cloudflare.com; img-src 'self' data:"><!--/CSP-->
 <title>Цифровая копия</title>
 <!--
   Страница заполнения «Цифровой копии» (План — Шаблон для других, этап 4).
@@ -162,6 +162,7 @@ code{font-family:var(--mono);font-size:13px}
 <script src="ekrany/shag.js"></script>
 <script src="ekrany/nedelya.js"></script>
 <script src="ekrany/vygruzka.js"></script>
+<script src="ekrany/ideya.js"></script>
 <script src="ekrany/novoe.js"></script>
 <!--/EKRANY-->
 <script>
@@ -690,6 +691,9 @@ function chips(items){
   return `<div class="chips">${items.filter(i => cls(i) === 'weak').map(i => `<span class="chip weak">слабое: ${esc(i.name)}</span>`).join('')}${items.filter(i => cls(i) === 'low').map(i => `<span class="chip low">ниже других: ${esc(i.name)}</span>`).join('')}${items.filter(i => cls(i) === 'strong').map(i => `<span class="chip strong">сильное: ${esc(i.name)}</span>`).join('')}${none ? `<span class="chip none">без оценки: ${none}</span>` : ''}</div>`;
 }
 function head(score, title, sub, items, label, calc){
+  // экран без своей цифры (опросник, выгрузка, форма) — только заголовок, без пустого «—»
+  if (score == null && !items && !calc && !['жизнь', 'сфера', 'луч', 'зона', 'ч в неделю'].includes(label))
+    return `<div><h1>${esc(title)}</h1><div class="sub">${sub}</div></div>`;
   return `<div class="head"><div class="big">${fmt(score)}<small>${label}</small></div>
     <div><h1>${esc(title)}</h1><div class="sub">${sub}</div>${calc ? `<div class="calc">${esc(calc)}</div>` : ''}${items ? chips(items) : ''}</div></div>`;
 }
@@ -762,6 +766,8 @@ const EK = window.EKRANY || {};
 function render(){
   const r = route();
   document.getElementById('vhodLink').textContent = S.mode === 'live' ? 'Хранилище' : 'Вход';
+  const ek0 = EK[r[0]];
+  if (ek0 && ek0.free && !ek0.need){ app.innerHTML = ek0.view(r.slice(1)); if (ek0.after) ek0.after(r.slice(1)); return; } // открыт и без входа
   if (r[0] === 'vhod' || !S.mode){ app.innerHTML = loginView(); return; }
   if (r[0] === 'vremya'){ app.innerHTML = vremyaView(); return; }
   const ek = EK[r[0]];
@@ -901,6 +907,7 @@ function loginView(){
       ${S.mode ? '' : '<div class="pick"><button class="btn" data-act="demo">Посмотреть без входа</button></div>'}</div>`;
   }
   if (S.mode === 'embedded') return h;
+  if (!live) h += `<p class="legend">Есть идея или что-то не работает? <a href="#/ideya">Предложить идею</a> — без входа.</p>`;
   let key = `<div class="card">
     <p class="desc">Все оценки хранятся в вашем закрытом хранилище на GitHub — на любом устройстве вы увидите одно и то же. Этому браузеру нужно один раз дать разрешение писать в хранилище: ключ доступа.</p>
     <label>Хранилище — имя или ссылка<input type="text" id="fRepo" placeholder="имя-аккаунта/имя-хранилища" value="${esc(repo)}" autocomplete="off" autocapitalize="off" spellcheck="false"></label>

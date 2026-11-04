@@ -139,6 +139,7 @@ class Sayt:
                  "(window.onTurnstile||function(){})();"))
         self.worker = worker
         self.page.route(f"http://127.0.0.1:{port}/vhod/**", self._vhod)
+        self.page.route(re.compile(rf"http://127\.0\.0\.1:{port}/idei.*"), self._vhod)
         if vhod:
             self.page.add_init_script(f"""try{{localStorage.setItem('tk.repo','{OWNER}/{REPO}');
                 localStorage.setItem('tk.token','proba');localStorage.setItem('tk.via','key');}}catch(e){{}}""")
@@ -477,6 +478,35 @@ def t_vygruzka(ctx, port, snimki):
     s.page.emulate_media(media="screen")
     s.snimok(snimki, "vygruzka")
     assert not s.errors, s.errors
+
+
+def t_ideya(ctx, port, snimki):
+    """«Предложить идею» без входа: Turnstile, отправка в помощник, ответ с номером; без настроек — ссылка на GitHub."""
+    sent = []
+
+    def worker(route, req):
+        if req.url.endswith("/idei/config"):
+            return route.fulfill(status=200, content_type="application/json", body=json.dumps({"sitekey": "0x4AAA", "ready": True}))
+        if req.url.endswith("/idei") and req.method == "POST":
+            sent.append(json.loads(req.post_data))
+            return route.fulfill(status=200, content_type="application/json", body=json.dumps({"ok": True, "number": 7}))
+        route.fulfill(status=404, body="{}", content_type="application/json")
+    s = Sayt(ctx, port, vhod=False, worker=worker)
+    s.page.goto(s.base + "#/ideya")
+    s.ждать_текст("Не пишите личного")
+    s.ждать(lambda: s.page.locator("#ideaSend").is_enabled(), what="Turnstile дал токен")
+    s.click("Что-то не работает")
+    s.page.fill("#ideaText", "После входа с телефона не сохраняется оценка")
+    s.snimok(snimki, "ideya")
+    s.page.locator("#ideaSend").click()
+    s.ждать_текст("Получено № 7")
+    assert sent and sent[0]["vid"] == "ошибка" and sent[0]["token"] == "proba-turnstile" and "не сохраняется" in sent[0]["text"], sent
+    assert not s.errors, s.errors
+    # помощник без настроек — ссылка на GitHub
+    s2 = Sayt(ctx, port, vhod=False)
+    s2.page.goto(s2.base + "#/ideya")
+    s2.ждать_текст("Форма пока не настроена")
+    assert not s2.errors, s2.errors
 
 
 PROVERKI = {k[2:]: v for k, v in list(globals().items()) if k.startswith("t_")}
