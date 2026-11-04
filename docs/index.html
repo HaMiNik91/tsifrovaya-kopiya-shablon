@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<!--CSP--><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https://api.github.com https://raw.githubusercontent.com; img-src 'self' data:"><!--/CSP-->
+<!--CSP--><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https://api.github.com https://raw.githubusercontent.com https://challenges.cloudflare.com; img-src 'self' data:"><!--/CSP-->
 <title>Цифровая копия</title>
 <!--
   Страница заполнения «Цифровой копии» (План — Шаблон для других, этап 4).
@@ -125,6 +125,26 @@ details .prose{margin-top:8px}
 .card.tw{grid-template-columns:minmax(0,1fr) 14px;color:inherit;text-decoration:none;gap:2px 10px}
 .card.tw span:not(.arrow){grid-column:1;font-size:13px;color:var(--muted)} .card.tw .arrow{grid-column:2;grid-row:1/3;align-self:center}
 .twh{display:flex;justify-content:space-between;gap:10px;align-items:baseline} .twh a{color:var(--ink);font-weight:600;text-decoration:none}
+.opr{display:grid;gap:2px}
+h2 a{color:var(--accent)}
+a.btn{text-decoration:none;display:inline-block}
+.wk .num{white-space:nowrap}
+.sub+.bar{margin-top:-8px}
+.chk{display:grid;grid-template-columns:22px minmax(0,1fr);gap:10px;align-items:start;font-weight:400;font-size:14px}
+.chk input{width:20px;height:20px;margin:1px 0 0}
+.print-doc{background:#fff;color:#111;border-radius:14px;padding:16px;font-size:13px;display:grid;gap:4px}
+.print-doc h1{font-size:18px} .print-doc h2{font-size:16px;margin-top:14px;border-bottom:2px solid #333;padding-bottom:3px}
+.print-doc h3{font-size:14px;margin:12px 0 0} .print-doc h4,.print-doc h5{font-size:13px;margin:8px 0 0}
+.print-doc p{margin:2px 0} .print-doc ul,.print-doc ol{margin:2px 0;padding-left:18px}
+.print-doc table{border-collapse:collapse;width:100%;margin:4px 0} .print-doc td,.print-doc th{border:1px solid #bbb;padding:3px 5px;text-align:left;vertical-align:top}
+.print-doc .fm{font-size:11px;color:#555} .print-doc .path{font-family:var(--mono)} .print-doc article{break-inside:avoid-page}
+@media print{.top,.noprint,.toast,body::before{display:none!important} body{background:#fff} .wrap{max-width:none;padding:0} .print-doc{padding:0;border-radius:0}
+  .print-doc section{break-before:page} .print-doc section:first-of-type{break-before:auto}}
+.ops{display:grid;gap:2px}
+.op{display:grid;grid-template-columns:38px minmax(0,1fr) auto 22px;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)}
+.op .num{font-size:14px;white-space:nowrap} .num.minus{color:var(--weak)} .num.plus{color:var(--strong)}
+select,input[type=date]{width:100%;font:15px var(--body);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px}
+.print-doc.dn{background:transparent;color:inherit;padding:8px 0 0} .print-doc.dn td,.print-doc.dn th{border-color:var(--line)}
 .center{min-height:50vh;display:grid;place-items:center;color:var(--muted)}
 ol.how{margin:0;padding-left:22px;display:grid;gap:8px;font-size:14px}
 ol.how a{color:var(--accent);word-break:break-all}
@@ -142,6 +162,16 @@ code{font-family:var(--mono);font-size:13px}
 <main class="wrap" id="app"><div class="center">Загрузка…</div></main>
 <div class="toast" id="toast" hidden></div>
 
+<!-- Экраны: каждый — свой файл в docs/ekrany (window.EKRANY); грузятся до основного скрипта -->
+<!--EKRANY--><script src="ekrany/obshchee.js"></script>
+<script src="ekrany/opros.js"></script>
+<script src="ekrany/shag.js"></script>
+<script src="ekrany/nedelya.js"></script>
+<script src="ekrany/dengi.js"></script>
+<script src="ekrany/vygruzka.js"></script>
+<script src="ekrany/ideya.js"></script>
+<script src="ekrany/novoe.js"></script>
+<!--/EKRANY-->
 <script>
 'use strict';
 // ───────── Настройки страницы ─────────
@@ -168,6 +198,8 @@ const S = {
   repos: null,          // хранилища, где стоит приложение (после входа через GitHub)
   files: new Map(),     // путь → {text, sha, pending:[op]}
   paths: [],            // все пути хранилища
+  sha: new Map(),       // путь → номер содержимого (из дерева хранилища): по нему догружаются файлы экранов
+  hidden: [],           // скрытые сферы (оглавление: скрыта: true)
   spheres: [],          // модель, собранная из файлов
   queue: Promise.resolve(), busy: 0, error: '',
   ui: {},               // состояние экрана: выбранный уровень, открытые формы
@@ -286,7 +318,8 @@ function buildRay(path, text){
   const name = (typeof fm['луч'] === 'string' && fm['луч']) || stem.split('— ').slice(1).join('— ') || stem;
   let items = fm['оценки'] || []; if (typeof items === 'string') items = [items];
   const P = parseBody(text), problems = [];
-  const ray = {path, stem, name, zones: [], score: null, calc: null, own: undefined, problems};
+  const ray = {path, stem, name, zones: [], score: null, calc: null, own: undefined, problems,
+    kod: fm['код'] || '', hidden: flag(fm['скрыт']), approx: String(fm['точность'] || '').trim() === 'примерно', question: typeof fm['вопрос'] === 'string' ? fm['вопрос'] : ''};
   const zmap = new Map();
   for (const it of items){
     const m = it.match(/^(.+?):\s*(нет|\d+)\s*$/);
@@ -324,6 +357,8 @@ function buildRay(path, text){
   return ray;
 }
 
+const flag = v => typeof v === 'string' && ['true', 'да', 'yes'].includes(v.trim().toLowerCase());
+const idxPath = s => `${SPH_DIR}/${s.dir}/${s.dir}.md`;
 function build(){
   const sph = new Map();
   for (const p of S.paths){
@@ -335,19 +370,26 @@ function build(){
     const scaleText = view(`${SPH_DIR}/${s.dir}/${s.nn} Шкала.md`) || '';
     const order = [...scaleText.matchAll(/\[\[([^\]|#]+)/g)].map(m => m[1]);
     const sfm = readFm(scaleText), n = v => { v = typeof v === 'string' ? parseFloat(v.replace(',', '.')) : NaN; return isFinite(v) ? v : null; };
-    const rays = [];
+    const all = [];
     for (const p of s.rayPaths){
       const t = view(p); if (t == null) continue;
       if (readFm(t)['тип'] !== 'луч') continue;
-      rays.push(buildRay(p, t));
+      all.push(buildRay(p, t));
     }
     const idx = r => { const i = order.indexOf(r.stem); return i < 0 ? 999 : i; };
-    rays.sort((a, b) => idx(a) - idx(b) || a.stem.localeCompare(b.stem));
+    all.sort((a, b) => idx(a) - idx(b) || a.stem.localeCompare(b.stem));
+    // скрытый луч («не моё») не входит в оценку сферы и в список лучей (как в shkala.py)
+    const rays = all.filter(r => !r.hidden), hiddenRays = all.filter(r => r.hidden);
     const [score, calc] = average(rays);
-    out.push({...s, rays, score, calc, rated: rays.filter(r => r.score != null).length,
+    const ifm = readFm(view(idxPath(s)) || ''), ord = parseInt(ifm['порядок'], 10);
+    const title = ((view(idxPath(s)) || '').match(/^# (.+)$/m) || [])[1] || s.name;
+    out.push({...s, rays, hiddenRays, score, calc, rated: rays.filter(r => r.score != null).length, title,
+      kod: ifm['код'] || s.nn, order: isFinite(ord) ? ord : 999, hiddenSphere: flag(ifm['скрыта']), hasIdx: view(idxPath(s)) != null,
       scalePath: `${SPH_DIR}/${s.dir}/${s.nn} Шкала.md`, hasScale: !!scaleText, imp: n(sfm['важность']), prio: n(sfm['приоритет']), hours: n(sfm['часы'])});
   }
-  S.spheres = out;
+  out.sort((a, b) => a.order - b.order || a.dir.localeCompare(b.dir));
+  S.spheres = out.filter(s => !s.hiddenSphere);   // скрытая сфера не на колесе и не в его среднем
+  S.hidden = out.filter(s => s.hiddenSphere);
 }
 
 // ───────── Правки файла (применяются к тексту; при конфликте — заново к свежей версии) ─────────
@@ -362,6 +404,7 @@ function touchFm(text, setters){
   }
   return `---\n${lines.join('\n')}\n---\n` + text.slice(m[0].length);
 }
+const hasFm = (text, k) => { const m = text.match(FM); return !!m && m[1].split('\n').some(l => !l.startsWith(' ') && l.split(':')[0].trim() === k); };
 function applyOp(text, op){
   if (op.type === 'create'){ if (text != null) throw new Error('такой файл уже есть'); return op.content; }
   if (text == null) throw new Error('файл не найден');
@@ -375,9 +418,12 @@ function applyOp(text, op){
     if (hit < 0) throw new Error(`в шапке нет строки «${op.key}»`);
     lines[hit] = `  - "${op.key}: ${op.val == null ? 'нет' : op.val}"`;
     text = `---\n${lines.join('\n')}\n---\n` + text.slice(m[0].length);
-    return touchFm(text, [['оценено', op.date, 'луч'], ['обновлено', op.date, 'статус']]);
+    const sets = [['оценено', op.date, 'луч'], ['обновлено', op.date, 'статус']];
+    if (op.exact && hasFm(text, 'точность')) sets.push(['точность', '', 'оценено']); // оценка по линейке — уже не «примерно»
+    return touchFm(text, sets);
   }
   if (op.type === 'fm') return touchFm(text, [...op.sets, ['обновлено', op.date, 'статус']]);
+  if (op.type === 'fn') return op.fn(text);
   if (op.type === 'level'){
     const P = parseBody(text), lad = findLadder(P, op.zone, op.sign);
     if (!lad) throw new Error('линейка не найдена');
@@ -499,7 +545,21 @@ function b64enc(str){ const b = new TextEncoder().encode(str); let s = ''; for (
 function b64dec(b64){ const s = atob(b64.replace(/\s/g, '')); const b = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) b[i] = s.charCodeAt(i); return new TextDecoder().decode(b); }
 async function pool(items, n, fn){ let i = 0; await Promise.all(Array.from({length: Math.min(n, items.length)}, async () => { while (i < items.length) await fn(items[i++]); })); }
 const norm = t => t.replace(/\r\n/g, '\n');
-const wanted = p => /^10 Сферы\/\d\d [^/]+\/(Шкала\/[^/]+\.md|\d\d Шкала\.md)$/.test(p) || p === '80 Шаблоны/Шаблон — Шаг.md';
+const isIdx = p => { const m = p.match(/^10 Сферы\/(\d\d [^/]+)\/([^/]+)\.md$/); return !!m && m[1] === m[2]; };
+const wanted = p => /^10 Сферы\/\d\d [^/]+\/(Шкала\/[^/]+\.md|\d\d Шкала\.md)$/.test(p) || isIdx(p) || p === '80 Шаблоны/Шаблон — Шаг.md';
+// Догрузка файлов для экранов (помощники, опросник, недели, деньги…): только то, чего ещё нет
+async function nuzhny(pred){
+  const need = S.paths.filter(p => pred(p) && !S.files.has(p));
+  if (!need.length || S.mode === 'embedded') return;
+  if (S.mode === 'live') await pool(need, 12, async p => {
+    const r = await gh('GET', `/repos/${S.owner}/${S.repo}/git/blobs/${S.sha.get(p)}`);
+    if (!S.files.has(p)) S.files.set(p, {text: norm(b64dec(r.content)), sha: r.sha, pending: []});
+  });
+  else { const [o, n] = CFG.template.split('/'); await pool(need, 12, async p => {
+    const r = await fetch(`https://raw.githubusercontent.com/${o}/${n}/${encodeURIComponent(S.branch)}/${encPath(p)}`);
+    if (r.ok && !S.files.has(p)) S.files.set(p, {text: norm(await r.text()), sha: null, pending: []});
+  }); }
+}
 
 async function loadLive(){
   const info = await gh('GET', `/repos/${S.owner}/${S.repo}`);
@@ -509,7 +569,7 @@ async function loadLive(){
   S.paths = tree.tree.filter(x => x.type === 'blob').map(x => x.path);
   const need = S.paths.filter(wanted);
   if (!need.some(p => p.includes('/Шкала/'))) throw new Error('в хранилище не найдена папка «10 Сферы» с лучами — это точно копия шаблона?');
-  const sha = new Map(tree.tree.map(x => [x.path, x.sha]));
+  const sha = S.sha = new Map(tree.tree.map(x => [x.path, x.sha]));
   await pool(need, 12, async p => { // файлы по их номерам из дерева, 12 запросов одновременно
     const r = await gh('GET', `/repos/${S.owner}/${S.repo}/git/blobs/${sha.get(p)}`);
     S.files.set(p, {text: norm(b64dec(r.content)), sha: r.sha, pending: []});
@@ -520,6 +580,7 @@ async function loadPublic(){
   const info = await gh('GET', `/repos/${o}/${n}`); S.branch = info.default_branch;
   const tree = await gh('GET', `/repos/${o}/${n}/git/trees/${encodeURIComponent(S.branch)}?recursive=1`);
   S.paths = tree.tree.filter(x => x.type === 'blob').map(x => x.path);
+  S.sha = new Map(tree.tree.map(x => [x.path, x.sha]));
   const need = S.paths.filter(wanted);
   await Promise.all(need.map(async p => {
     const r = await fetch(`https://raw.githubusercontent.com/${o}/${n}/${encodeURIComponent(S.branch)}/${encPath(p)}`);
@@ -637,6 +698,9 @@ function chips(items){
   return `<div class="chips">${items.filter(i => cls(i) === 'weak').map(i => `<span class="chip weak">слабое: ${esc(i.name)}</span>`).join('')}${items.filter(i => cls(i) === 'low').map(i => `<span class="chip low">ниже других: ${esc(i.name)}</span>`).join('')}${items.filter(i => cls(i) === 'strong').map(i => `<span class="chip strong">сильное: ${esc(i.name)}</span>`).join('')}${none ? `<span class="chip none">без оценки: ${none}</span>` : ''}</div>`;
 }
 function head(score, title, sub, items, label, calc){
+  // экран без своей цифры (опросник, выгрузка, форма) — только заголовок, без пустого «—»
+  if (score == null && !items && !calc && !['жизнь', 'сфера', 'луч', 'зона', 'ч в неделю'].includes(label))
+    return `<div><h1>${esc(title)}</h1><div class="sub">${sub}</div></div>`;
   return `<div class="head"><div class="big">${fmt(score)}<small>${label}</small></div>
     <div><h1>${esc(title)}</h1><div class="sub">${sub}</div>${calc ? `<div class="calc">${esc(calc)}</div>` : ''}${items ? chips(items) : ''}</div></div>`;
 }
@@ -705,11 +769,28 @@ const app = document.getElementById('app');
 let LADDERS = {};
 function route(){ return location.hash.replace(/^#\/?/, '').split('/').filter(Boolean).map(decodeURIComponent); }
 
+const EK = window.EKRANY || {};
 function render(){
   const r = route();
   document.getElementById('vhodLink').textContent = S.mode === 'live' ? 'Хранилище' : 'Вход';
+  const ek0 = EK[r[0]];
+  if (ek0 && ek0.free && !ek0.need){ app.innerHTML = ek0.view(r.slice(1)); if (ek0.after) ek0.after(r.slice(1)); return; } // открыт и без входа
   if (r[0] === 'vhod' || !S.mode){ app.innerHTML = loginView(); return; }
   if (r[0] === 'vremya'){ app.innerHTML = vremyaView(); return; }
+  const ek = EK[r[0]];
+  if (ek){
+    // экран со своими файлами: догрузить и показать; ошибка догрузки — сообщением
+    if (ek.need && !ek.loaded){
+      app.innerHTML = `<div class="center">Загружаю…</div>`;
+      const mode = S.mode;
+      nuzhny(ek.need).then(() => { if (S.mode === mode){ ek.loaded = true; render(); } })
+        .catch(e => { app.innerHTML = `<div class="note err">Не загрузилось: ${esc(e.message)}</div>`; });
+      return;
+    }
+    app.innerHTML = ek.view(r.slice(1));
+    if (ek.after) ek.after(r.slice(1));
+    return;
+  }
   LADDERS = {};
   const sp = S.spheres.find(s => s.nn === r[0]);
   let h;
@@ -730,6 +811,9 @@ function wheelView(){
   h += radar(items) + rows(items);
   const tw = S.spheres.filter(s => s.prio != null).sort((a, b) => a.prio - b.prio);
   h += `<a class="card tw" href="#/vremya"><b>Время и внимание</b><span>${tw.length ? 'Приоритеты: ' + tw.map(s => `${s.prio} — ${esc(s.name)}`).join(', ') : 'Какие сферы двигать первыми и сколько часов в неделю на каждую'}</span><span class="arrow">›</span></a>`;
+  h += Object.entries(EK).filter(([, e]) => e.menu).sort((a, b) => a[1].menu.order - b[1].menu.order)
+    .map(([k, e]) => `<a class="card tw" href="#/${k}"><b>${esc(e.menu.title)}</b><span>${esc(typeof e.menu.sub === 'function' ? e.menu.sub() : e.menu.sub)}</span><span class="arrow">›</span></a>`).join('');
+  if (S.hidden.length) h += hiddenBlock('Скрытые сферы', S.hidden.map(s => ({name: `${s.nn} ${s.name}`, act: 'unhideSphere', id: s.dir})));
   return h + `<p class="legend">Нажмите на сферу: откроются её лучи. Оценку ставите только внизу — на линейке уровней; всё выше страница считает сама: среднее, ,5 и меньше — вниз, больше ,5 — вверх.</p>`;
 }
 function crumbs(sp, ray, ri, zone){
@@ -739,9 +823,22 @@ function crumbs(sp, ray, ri, zone){
   return `<nav class="crumbs">${p.join('<span>›</span>')}</nav>`;
 }
 function sphereView(sp){
-  const items = sp.rays.map((r, i) => ({name: r.name, score: r.score, href: `#/${sp.nn}/${i}`, extra: r.zones.length ? extra(r.rated, r.leaves.length, 'оценок', r.score) : (r.score == null ? 'не оценено' : '')}));
+  const items = sp.rays.map((r, i) => ({name: r.name, score: r.score, href: `#/${sp.nn}/${i}`, extra: [r.approx ? 'примерно' : '', r.zones.length ? extra(r.rated, r.leaves.length, 'оценок', r.score) : (r.score == null ? 'не оценено' : '')].filter(Boolean).join(' · ')}));
   let h = tabs(sp.nn) + crumbs(sp) + head(sp.score, sp.name, `Среднее по ${sp.rated} лучам из ${sp.rays.length}`, items, 'сфера', sp.calc);
-  return h + radar(items) + rows(items) + `<p class="legend">Нажмите на луч: откроются его зоны или сразу линейка уровней.</p>`;
+  h += radar(items) + rows(items) + `<p class="legend">Нажмите на луч: откроются его зоны или сразу линейка уровней. «Примерно» — оценка из опросника: проверьте её по линейке.</p>`;
+  if (sp.hiddenRays.length) h += hiddenBlock('Скрытые лучи («не моё»)', sp.hiddenRays.map(r => ({name: r.name, act: 'unhideRay', id: r.path})));
+  if (sp.hasIdx) h += `<div class="pick"><button class="btn" data-act="hideSphere" data-id="${esc(sp.dir)}">Скрыть сферу — не моё сейчас</button></div>`;
+  return h;
+}
+function hiddenBlock(title, list){
+  return `<details><summary>${esc(title)}: ${list.length}</summary><div class="prose" style="margin-top:8px">` +
+    list.map(x => `<div class="twh"><span>${esc(x.name)}</span><button class="btn" data-act="${x.act}" data-id="${esc(x.id)}">Вернуть</button></div>`).join('') +
+    `<p class="legend">Скрытое не входит в оценки и колесо, но ничего не удалено.</p></div></details>`;
+}
+function rayTools(ray){
+  let h = '';
+  if (ray.approx) h += `<div class="note">Оценка «примерно» — из опросника. Пройдите линейку${ray.zones.length ? ' каждой зоны' : ''} и поставьте свою цифру${ray.zones.length ? ', затем снимите пометку' : ''}.${ray.zones.length ? `<div class="pick" style="margin-top:8px"><button class="btn" data-act="exactRay" data-id="${esc(ray.path)}">Проверил по линейке — снять «примерно»</button></div>` : ''}</div>`;
+  return h;
 }
 function rayView(sp, ray, ri){
   let h = crumbs(sp, ray, ri);
@@ -749,9 +846,11 @@ function rayView(sp, ray, ri){
   h += head(ray.score, ray.name, ray.zones.length ? `Зон: ${ray.zones.length}` : 'Одна линейка, без зон', ray.zones.length ? zi : null, 'луч', ray.calc);
   if (ray.desc) h += `<p class="desc">${md(ray.desc).replace(/<\/?p>/g, '')}</p>`;
   for (const p of ray.problems) h += `<div class="note err">В файле луча: ${esc(p)}</div>`;
-  if (ray.zones.length) return h + radar(zi) + rows(zi);
+  h += rayTools(ray);
+  const hide = `<div class="pick"><button class="btn" data-act="hideRay" data-id="${esc(ray.path)}">Скрыть луч — не моё</button></div>`;
+  if (ray.zones.length) return h + radar(zi) + rows(zi) + hide;
   const o = ladderSpec(sp, ray, null, null); LADDERS[o.id] = o;
-  return h + (o.lad ? ladder(o) : `<div class="note">Линейки уровней в файле пока нет.</div>`) + proseBlock(o.prose);
+  return h + (o.lad ? ladder(o) : `<div class="note">Линейки уровней в файле пока нет.</div>`) + proseBlock(o.prose) + hide;
 }
 function zoneView(sp, ray, ri, zone){
   let h = crumbs(sp, ray, ri, zone) + head(zone.score, zone.name, `Зона луча «${esc(ray.name)}»`, zone.signs.length > 1 ? zone.signs : null, 'зона', zone.calc);
@@ -815,6 +914,7 @@ function loginView(){
       ${S.mode ? '' : '<div class="pick"><button class="btn" data-act="demo">Посмотреть без входа</button></div>'}</div>`;
   }
   if (S.mode === 'embedded') return h;
+  if (!live) h += `<p class="legend">Есть идея или что-то не работает? <a href="#/ideya">Предложить идею</a> — без входа.</p>`;
   let key = `<div class="card">
     <p class="desc">Все оценки хранятся в вашем закрытом хранилище на GitHub — на любом устройстве вы увидите одно и то же. Этому браузеру нужно один раз дать разрешение писать в хранилище: ключ доступа.</p>
     <label>Хранилище — имя или ссылка<input type="text" id="fRepo" placeholder="имя-аккаунта/имя-хранилища" value="${esc(repo)}" autocomplete="off" autocapitalize="off" spellcheck="false"></label>
@@ -844,7 +944,7 @@ app.addEventListener('click', e => {
   if (act === 'score'){
     const val = b.dataset.level ? +b.dataset.level : null;
     S.ui = {};
-    change(o.ray.path, {type: 'score', key: o.key, val, date: today()},
+    change(o.ray.path, {type: 'score', key: o.key, val, date: today(), exact: !o.zone},
       `Оценка: ${o.ray.name}${o.key !== o.ray.name ? ' — ' + o.key : ''}: ${val == null ? 'снята' : val}`);
     toast(val == null ? 'Оценка снята' : `Оценка ${val} — ${o.title}`);
     return;
@@ -867,6 +967,27 @@ app.addEventListener('click', e => {
     if (f === 'приоритет' && val !== ''){ const other = S.spheres.find(x => x !== s && x.prio === v); if (other) twSet(other, 'приоритет', ''); }
     twSet(s, f, val); toast(val === '' ? `${s.name}: ${f} снято` : `${s.name}: ${f} ${val}`); return;
   }
+  if (act === 'hideRay' || act === 'unhideRay'){
+    const v = act === 'hideRay';
+    const ray = S.spheres.flatMap(s => [...s.rays, ...s.hiddenRays]).find(r => r.path === b.dataset.id);
+    change(b.dataset.id, {type: 'fm', sets: [['скрыт', v ? 'true' : 'false', 'код']], date: today()}, `${v ? 'Скрыт' : 'Возвращён'} луч: ${ray ? ray.name : ''}`);
+    toast(v ? 'Луч скрыт — он внизу сферы, в «Скрытых»' : 'Луч возвращён');
+    if (v) location.hash = `#/${b.dataset.id.split('/')[1].slice(0, 2)}`;
+    return;
+  }
+  if (act === 'hideSphere' || act === 'unhideSphere'){
+    const v = act === 'hideSphere', dir = b.dataset.id;
+    change(`${SPH_DIR}/${dir}/${dir}.md`, {type: 'fm', sets: [['скрыта', v ? 'true' : 'false', 'порядок']], date: today()}, `${v ? 'Скрыта' : 'Возвращена'} сфера: ${dir}`);
+    toast(v ? 'Сфера скрыта — она внизу колеса, в «Скрытых»' : 'Сфера возвращена');
+    if (v) location.hash = '#/';
+    return;
+  }
+  if (act === 'exactRay'){
+    change(b.dataset.id, {type: 'fm', sets: [['точность', '', 'оценено']], date: today()}, 'Луч проверен по линейке — снято «примерно»');
+    toast('Пометка «примерно» снята'); return;
+  }
+  const pre = act.split(':')[0];
+  if (EK[pre] && EK[pre].act){ EK[pre].act(act.slice(pre.length + 1), b, e); return; }
   if (act === 'login'){ login(); return; }
   if (act === 'demo'){ start('public'); return; }
   if (act === 'logout'){ forgetLogin(); S.mode = null; S.files = new Map(); location.hash = '#/vhod'; start(null); return; }
@@ -876,6 +997,8 @@ app.addEventListener('click', e => {
 });
 
 app.addEventListener('change', e => {
+  const ch = e.target.closest('[data-ch]');
+  if (ch){ const pre = ch.dataset.ch.split(':')[0]; if (EK[pre] && EK[pre].change) EK[pre].change(ch.dataset.ch.slice(pre.length + 1), ch, e); return; }
   const inp = e.target.closest('[data-hours]'); if (!inp) return;
   const s = S.spheres.find(x => x.nn === inp.dataset.hours), raw = inp.value.trim().replace(',', '.');
   const v = raw === '' ? '' : Math.round(parseFloat(raw) * 10) / 10;
@@ -912,7 +1035,7 @@ async function login(){
 }
 
 async function start(mode){
-  S.files = new Map(); S.paths = []; S.ui = {}; S.error = '';
+  S.files = new Map(); S.paths = []; S.sha = new Map(); S.ui = {}; S.error = '';
   const token = LS.get('tk.token');
   S.via = token ? (LS.get('tk.via') || 'key') : ''; S.token = token || '';
   if (!mode && !window.DEMO_FILES && S.via === 'app'){
@@ -937,7 +1060,8 @@ async function start(mode){
     if (mode === 'live'){ [S.owner, S.repo] = repo.split('/'); await loadLive(); document.getElementById('brand').textContent = S.repo; S.loginError = ''; }
     else if (mode === 'public'){ S.token = ''; await loadPublic(); }
     else loadEmbedded();
-    S.mode = mode; build(); status();
+    S.mode = mode; for (const k in EK) EK[k].loaded = false; build(); status();
+    for (const k in EK) if (EK[k].fon) EK[k].fon(); // фоновая подготовка экранов (например, «вышла новая версия»)
     if (route()[0] === 'vhod' && mode !== 'live') location.hash = '#/';
     render();
   } catch(e){

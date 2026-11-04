@@ -66,6 +66,8 @@
     "доля": "number",
     "счета": "multitext",
     "регулярно": "multitext",
+    "валюта": "text",
+    "курсы": "multitext",
     "месяц": "text",
     "доход": "text",
     "расход": "text",
