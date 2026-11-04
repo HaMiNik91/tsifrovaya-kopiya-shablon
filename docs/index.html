@@ -130,6 +130,16 @@ h2 a{color:var(--accent)}
 a.btn{text-decoration:none;display:inline-block}
 .wk .num{white-space:nowrap}
 .sub+.bar{margin-top:-8px}
+.chk{display:grid;grid-template-columns:22px minmax(0,1fr);gap:10px;align-items:start;font-weight:400;font-size:14px}
+.chk input{width:20px;height:20px;margin:1px 0 0}
+.print-doc{background:#fff;color:#111;border-radius:14px;padding:16px;font-size:13px;display:grid;gap:4px}
+.print-doc h1{font-size:18px} .print-doc h2{font-size:16px;margin-top:14px;border-bottom:2px solid #333;padding-bottom:3px}
+.print-doc h3{font-size:14px;margin:12px 0 0} .print-doc h4,.print-doc h5{font-size:13px;margin:8px 0 0}
+.print-doc p{margin:2px 0} .print-doc ul,.print-doc ol{margin:2px 0;padding-left:18px}
+.print-doc table{border-collapse:collapse;width:100%;margin:4px 0} .print-doc td,.print-doc th{border:1px solid #bbb;padding:3px 5px;text-align:left;vertical-align:top}
+.print-doc .fm{font-size:11px;color:#555} .print-doc .path{font-family:var(--mono)} .print-doc article{break-inside:avoid-page}
+@media print{.top,.noprint,.toast,body::before{display:none!important} body{background:#fff} .wrap{max-width:none;padding:0} .print-doc{padding:0;border-radius:0}
+  .print-doc section{break-before:page} .print-doc section:first-of-type{break-before:auto}}
 .center{min-height:50vh;display:grid;place-items:center;color:var(--muted)}
 ol.how{margin:0;padding-left:22px;display:grid;gap:8px;font-size:14px}
 ol.how a{color:var(--accent);word-break:break-all}
@@ -151,6 +161,7 @@ code{font-family:var(--mono);font-size:13px}
 <!--EKRANY--><script src="ekrany/opros.js"></script>
 <script src="ekrany/shag.js"></script>
 <script src="ekrany/nedelya.js"></script>
+<script src="ekrany/vygruzka.js"></script>
 <script src="ekrany/novoe.js"></script>
 <!--/EKRANY-->
 <script>

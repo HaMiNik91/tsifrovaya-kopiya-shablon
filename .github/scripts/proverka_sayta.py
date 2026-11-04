@@ -452,6 +452,33 @@ def t_nedelya(ctx, port, snimki):
     assert not s.errors, s.errors
 
 
+def t_vygruzka(ctx, port, snimki):
+    """Выгрузка: только Медкарта и колесо — текстом (.md) и для печати в PDF."""
+    s = Sayt(ctx, port).open()
+    s.go("#/vygruzka")
+    s.ждать_текст("Отметьте, что выгрузить")
+    s.page.locator("input[value='medkarta']").check()
+    s.ждать_текст("Собрать (файлов:")
+    s.snimok(snimki, "vygruzka-vybor")
+    s.page.locator("[data-act='vygruzka:build']").click()
+    s.ждать_текст("Выгрузка готова")
+    txt = s.text()
+    assert "карта тела" in txt and "замеры тела" in txt and "колесо и оценки" in txt, txt[:400]
+    assert "журнал" not in txt.split("выгрузка готова")[1].split("цифровая копия — выгрузка")[0], "лишнее в выгрузке"
+    with s.page.expect_download() as dl:
+        s.click("Скачать текстом (.md)")
+    md = pathlib.Path(dl.value.path()).read_text(encoding="utf-8")
+    assert "# Медкарта" in md and "## 01 Карта тела" in md and "# Колесо и оценки" in md, md[:300]
+    assert "```base" not in s.page.inner_html(".print-doc"), "таблица Obsidian попала в печать"
+    s.page.emulate_media(media="print")
+    if snimki:
+        s.page.pdf(path=str(pathlib.Path(snimki) / "vygruzka.pdf"))
+    assert not s.page.locator(".top").is_visible(), "шапка сайта видна при печати"
+    s.page.emulate_media(media="screen")
+    s.snimok(snimki, "vygruzka")
+    assert not s.errors, s.errors
+
+
 PROVERKI = {k[2:]: v for k, v in list(globals().items()) if k.startswith("t_")}
 
 
