@@ -26,3 +26,5 @@ jobs:
         run: python3 .github/scripts/dengi.py
       - name: План недели
         run: python3 .github/scripts/nedelya.py
+      - name: Ветки событий
+        run: python3 .github/scripts/vetki.py
