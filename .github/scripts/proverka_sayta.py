@@ -186,6 +186,20 @@ class Sayt:
         if n is not None:
             assert len(self.gh.commits) >= n, f"коммитов {len(self.gh.commits)}, ждали {n}: {self.gh.commits}"
 
+    def programmy(self, *names):
+        """Записанное страницей — в пробную копию хранилища, и там запустить программы (без --write): ошибок быть не должно."""
+        import shutil
+        import tempfile
+        d = pathlib.Path(tempfile.mkdtemp(prefix="sayt-")) / "kopiya"
+        shutil.copytree(ROOT, d, ignore=shutil.ignore_patterns(".git"))
+        for fp, _ in self.gh.commits:
+            (d / fp).parent.mkdir(parents=True, exist_ok=True)
+            (d / fp).write_text(self.gh.files[fp], encoding="utf-8")
+        for n in names:
+            r = subprocess.run([sys.executable, str(d / ".github/scripts" / n)], cwd=d, capture_output=True, text=True)
+            assert r.returncode == 0 and "✖" not in r.stdout, f"{n}: {r.stdout[-800:]}{r.stderr[-400:]}"
+        shutil.rmtree(d.parent)
+
     def text(self):
         """Текст экрана строчными буквами (часть подписей CSS показывает заглавными)."""
         return self.page.inner_text("#app").lower()
@@ -252,6 +266,7 @@ def t_osnova(ctx, port, snimki):
     idx = "10 Сферы/03 Интеллект/03 Интеллект.md"
     assert fm_get(s.gh.files[idx], "скрыта") == "true"
     assert "скрытые сферы: 1" in s.text()
+    s.programmy("shkala.py")
     assert not s.errors, s.errors
 
 
@@ -277,6 +292,70 @@ def t_novoe(ctx, port, snimki):
     assert s.page.locator("a.btn.main", has_text="Обновить копию").get_attribute("href").endswith("/actions/workflows/obnovlenie.yml")
     s.snimok(snimki, "novoe")
     assert not s.errors, s.errors
+
+
+def t_opros(ctx, port, snimki):
+    """Опросник: пара и дети, общий вопрос ставит «примерно» лучам без оценки, уточнение кусочком линейки."""
+    s = Sayt(ctx, port).open()
+    g = s.gh.files
+    para = next(p for p, t in g.items() if fm_get(t, "код") == "06.04" and fm_get(t, "тип") == "луч")
+    deti = next(p for p, t in g.items() if fm_get(t, "код") == "07.01" and fm_get(t, "тип") == "луч")
+    s.go("#/opros")
+    s.snimok(snimki, "opros-start")
+    s.click("Начать")
+    s.ждать_текст("Есть ли у вас сейчас пара")
+    s.click("Нет")
+    s.ждать_текст("Есть ли у вас дети")
+    assert fm_get(s.gh.files[para], "скрыт") == "true" or s.page.inner_text("#pill"), "пара"
+    s.click("Нет")
+    s.ждать_текст("Как в целом обстоят дела со здоровьем")
+    s.snimok(snimki, "opros-sfera")
+    s.click("[data-act='opros:main'][data-v='5']")
+    s.ждать_текст("Хватает ли вам сил")
+    s.ждать_записи()
+    sfera01 = [p for p in s.gh.files if p.startswith("10 Сферы/01 ") and "/Шкала/" in p and fm_get(s.gh.files[p], "тип") == "луч"]
+    for p in sfera01:
+        t = s.gh.files[p]
+        if fm_get(t, "скрыт") == "true":
+            continue
+        assert all(x.endswith(": 5") for x in fm_get(t, "оценки")), (p, fm_get(t, "оценки"))
+        assert fm_get(t, "точность") == "примерно", p
+    s.click("Средне")
+    s.ждать_текст("берите нижний")
+    s.snimok(snimki, "opros-kusok")
+    s.click("[data-act='opros:lvl'][data-v='6']")
+    s.ждать_записи()
+    sil = next(p for p in sfera01 if fm_get(s.gh.files[p], "код") == "01.12")
+    t = s.gh.files[sil]
+    assert fm_get(t, "оценки")[0].endswith(": 6") and not fm_get(t, "точность"), (fm_get(t, "оценки"), fm_get(t, "точность"))
+    # уточнение зоны: луч остаётся «примерно»
+    s.ждать_текст("Как вы спите")
+    s.click("Хорошо")
+    s.click("[data-act='opros:lvl'][data-v='8']")
+    s.ждать_записи()
+    son = next(p for p in sfera01 if fm_get(s.gh.files[p], "код") == "01.07")
+    assert "Сон: 8" in " ".join(fm_get(s.gh.files[son], "оценки")) and fm_get(s.gh.files[son], "точность") == "примерно"
+    assert fm_get(s.gh.files[para], "скрыт") == "true", "без пары луч 06.04 не скрыт"
+    # дошли до сферы 07: общий ответ не трогает «Свои дети»
+    for _ in range(40):
+        if "· 07 семья" in s.page.inner_text(".sub").lower() and s.page.locator("[data-act='opros:main']").count():
+            break
+        s.click("Пропустить")
+    else:
+        raise AssertionError("не дошёл до сферы 07: " + s.text()[:200])
+    s.click("[data-act='opros:main'][data-v='7']")
+    s.ждать_записи()
+    oc = fm_get(s.gh.files[deti], "оценки")
+    assert "Свои дети: нет" in oc and "Готовность: 7" in oc, oc
+    # признаки «Мама» / «Папа» — по отдельности, «нет такого человека»
+    s.ждать_текст("— Мама")
+    s.click("Нет такого человека")
+    s.ждать_текст("— Папа")
+    assert "сфера 7 из 12" in s.page.inner_text(".sub").lower(), s.page.inner_text(".sub")
+    s.ждать_записи()
+    s.programmy("shkala.py", "oprosnik.py", "sled_shag.py")
+    assert not s.errors, s.errors
+    s.snimok(snimki, "opros-priznak")
 
 
 PROVERKI = {k[2:]: v for k, v in list(globals().items()) if k.startswith("t_")}
