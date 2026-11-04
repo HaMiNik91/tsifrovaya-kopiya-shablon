@@ -98,6 +98,8 @@ class Gh:
                 self.files[fp] = new
                 self.commits.append((fp, body["message"]))
                 return ok({"content": {"sha": sha_of(new)}}, 201 if cur is None else 200)
+        if path.endswith("/issues") and m == "GET":
+            return ok(self.issues)
         return ok({"message": f"не подменено: {m} {path}"}, 404)
 
     def raw(self, route, request):
@@ -152,10 +154,25 @@ class Sayt:
         self.page.wait_for_selector(".head, .note.err, h1", timeout=15000)
         return self
 
+    def ждать(self, cond, timeout=10000, what=""):
+        """Ждать, пока cond() верно (опрос из Python: строгие правила CSP страницы запрещают eval в браузере)."""
+        import time
+        end = time.time() + timeout / 1000
+        while time.time() < end:
+            try:
+                if cond():
+                    return
+            except Exception:  # noqa: BLE001
+                pass
+            self.page.wait_for_timeout(50)
+        raise AssertionError(f"не дождался: {what or cond}")
+
+    def ждать_текст(self, s, timeout=10000):
+        self.ждать(lambda: s.lower() in self.page.inner_text("body").lower(), timeout, f"текст «{s}»")
+
     def go(self, hash_):
-        self.page.evaluate(f"location.hash = {json.dumps(hash_)}")
-        self.page.wait_for_timeout(50)
-        self.page.wait_for_function("!document.querySelector('#app .center')", timeout=15000)
+        self.page.goto(self.base + hash_)
+        self.ждать(lambda: self.page.locator("#app .center").count() == 0, 15000, "загрузка экрана")
 
     def click(self, selector_or_text):
         loc = self.page.locator(selector_or_text) if selector_or_text[:1] in "[.#" else self.page.get_by_text(selector_or_text, exact=True)
@@ -164,12 +181,14 @@ class Sayt:
 
     def ждать_записи(self, n=None, timeout=10000):
         """Дождаться, пока очередь записи пуста (и, если задано, коммитов не меньше n)."""
-        self.page.wait_for_function("document.getElementById('pill').textContent !== '' && !/Сохраняю/.test(document.getElementById('pill').textContent)", timeout=timeout)
+        pill = lambda: self.page.inner_text("#pill")  # noqa: E731
+        self.ждать(lambda: pill() != "" and "Сохраняю" not in pill() and (n is None or len(self.gh.commits) >= n), timeout, "запись")
         if n is not None:
             assert len(self.gh.commits) >= n, f"коммитов {len(self.gh.commits)}, ждали {n}: {self.gh.commits}"
 
     def text(self):
-        return self.page.inner_text("#app")
+        """Текст экрана строчными буквами (часть подписей CSS показывает заглавными)."""
+        return self.page.inner_text("#app").lower()
 
     def snimok(self, d, name):
         if d:
@@ -204,14 +223,14 @@ def t_osnova(ctx, port, snimki):
     key = fm_get(t, "оценки")[0].rsplit(":", 1)[0]
     t = t.replace(f'"{key}: нет"', f'"{key}: 5"', 1)
     s = Sayt(ctx, port, {ray: t}).open()
-    assert "Колесо сфер" in s.text(), "нет колеса"
+    assert "колесо сфер" in s.text(), "нет колеса"
     s.snimok(snimki, "osnova-koleso")
     s.go("#/03")
     assert "примерно" in s.text(), "в списке лучей нет пометки «примерно»"
     rays = s.page.locator(".rows .row .name").all_inner_texts()
     i = next(k for k, x in enumerate(rays) if x.startswith(fm_get(t, "луч") or key))
     s.go(f"#/03/{i}")
-    assert "Оценка «примерно»" in s.text()
+    assert "оценка «примерно»" in s.text()
     s.click(".lv >> nth=3")   # уровень 7
     s.click("Моя оценка — 7")
     s.ждать_записи(1)
@@ -222,7 +241,7 @@ def t_osnova(ctx, port, snimki):
     s.click("Скрыть луч — не моё")
     s.ждать_записи(2)
     assert fm_get(s.gh.files[ray], "скрыт") == "true"
-    assert "Скрытые лучи" in s.text()
+    assert "скрытые лучи" in s.text()
     s.page.locator("details summary", has_text="Скрытые лучи").click()
     s.click("Вернуть")
     s.ждать_записи(3)
@@ -232,7 +251,31 @@ def t_osnova(ctx, port, snimki):
     s.ждать_записи(4)
     idx = "10 Сферы/03 Интеллект/03 Интеллект.md"
     assert fm_get(s.gh.files[idx], "скрыта") == "true"
-    assert "Скрытые сферы: 1" in s.text()
+    assert "скрытые сферы: 1" in s.text()
+    assert not s.errors, s.errors
+
+
+def t_novoe(ctx, port, snimki):
+    """«Что нового»: версии шаблона, кнопка обновления у старой копии, сделанные пожелания."""
+    g = Gh()
+    f = "00 Старт/Что нового.md"
+    tv = fm_get(g.files[f], "версия")
+    s = Sayt(ctx, port)
+    s.gh.issues = [{"title": "Тёмная тема на телефоне", "labels": [{"name": "сделано"}]}]
+    old = s.gh.files[f]
+    # копия отстала: в шаблоне (raw) — нынешний файл, в копии — версия 1.0
+    s.page.unroute("https://raw.githubusercontent.com/**")
+    s.page.route("https://raw.githubusercontent.com/**", lambda r, q: r.fulfill(status=200, body=old, headers={"Access-Control-Allow-Origin": "*"}))
+    s.gh.files[f] = old.replace(f'версия: "{tv}"', 'версия: "1.0"', 1)
+    s.open()
+    s.ждать_текст("Вышла версия")
+    s.go("#/novoe")
+    s.ждать_текст("Есть обновление")
+    txt = s.text()
+    assert f"есть обновление: 1.0 → {tv}" in txt, txt[:300]
+    assert "тёмная тема на телефоне" in txt and "ещё нет у вас" in txt
+    assert s.page.locator("a.btn.main", has_text="Обновить копию").get_attribute("href").endswith("/actions/workflows/obnovlenie.yml")
+    s.snimok(snimki, "novoe")
     assert not s.errors, s.errors
 
 

@@ -142,6 +142,9 @@ code{font-family:var(--mono);font-size:13px}
 <main class="wrap" id="app"><div class="center">Загрузка…</div></main>
 <div class="toast" id="toast" hidden></div>
 
+<!-- Экраны: каждый — свой файл в docs/ekrany (window.EKRANY); грузятся до основного скрипта -->
+<!--EKRANY--><script src="ekrany/novoe.js"></script>
+<!--/EKRANY-->
 <script>
 'use strict';
 // ───────── Настройки страницы ─────────
@@ -1025,6 +1028,7 @@ async function start(mode){
     else if (mode === 'public'){ S.token = ''; await loadPublic(); }
     else loadEmbedded();
     S.mode = mode; for (const k in EK) EK[k].loaded = false; build(); status();
+    for (const k in EK) if (EK[k].fon) EK[k].fon(); // фоновая подготовка экранов (например, «вышла новая версия»)
     if (route()[0] === 'vhod' && mode !== 'live') location.hash = '#/';
     render();
   } catch(e){

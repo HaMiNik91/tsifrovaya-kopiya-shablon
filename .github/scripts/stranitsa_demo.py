@@ -14,7 +14,8 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 PAGE = ROOT / "docs" / "index.html"
-WANT = re.compile(r"^10 Сферы/\d\d [^/]+/(Шкала/[^/]+\.md|\d\d Шкала\.md)$")
+# все записи копии, кроме архива: их читают экраны (опросник, помощники, недели, деньги, «Что нового»)
+WANT = re.compile(r"^(00 Старт|10 Сферы|20 Журнал|40 Люди|60 Помощники|70 Ветки|80 Шаблоны)/.+\.md$")
 
 
 def main():
@@ -23,7 +24,7 @@ def main():
     files = {}
     for p in sorted(ROOT.rglob("*.md")):
         rel = p.relative_to(ROOT).as_posix()
-        if WANT.match(rel) or rel == "80 Шаблоны/Шаблон — Шаг.md":
+        if WANT.match(rel):
             files[rel] = p.read_text(encoding="utf-8")
     page = PAGE.read_text(encoding="utf-8")
     page = re.sub(r"<!--CSP-->.*?<!--/CSP-->\n?", "", page, flags=re.S)  # чужая обёртка страницы — без своих запретов
@@ -32,6 +33,9 @@ def main():
                 r'<meta charset="utf-8">\n', r'<meta name="viewport"[^>]*>\n'):
         page = re.sub(tag, "", page, count=2, flags=re.I)
     page = page.replace("<title>Цифровая копия</title>", "<title>Демо Цифровой копии</title>", 1)
+    # экраны из docs/ekrany — внутрь страницы: у артефакта нет соседних файлов
+    page = re.sub(r'<script src="(ekrany/[^"]+)"></script>',
+                  lambda m: "<script>\n" + (ROOT / "docs" / m.group(1)).read_text(encoding="utf-8").replace("</", "<\\/") + "\n</script>", page)
     data = json.dumps(files, ensure_ascii=False).replace("</", "<\\/")
     page = page.replace("<script>\n'use strict';", f"<script>window.DEMO_FILES = {data};</script>\n<script>\n'use strict';", 1)
     pathlib.Path(sys.argv[1]).write_text(page, encoding="utf-8")
