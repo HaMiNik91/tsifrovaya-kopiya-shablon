@@ -172,7 +172,9 @@ class Sayt:
         self.ждать(lambda: s.lower() in self.page.inner_text("body").lower(), timeout, f"текст «{s}»")
 
     def go(self, hash_):
-        self.page.goto(self.base + hash_)
+        """Открыть экран заново (полная загрузка — страница читает файлы с подменённого GitHub)."""
+        self._n = getattr(self, "_n", 0) + 1
+        self.page.goto(f"{self.base}?z={self._n}{hash_}")
         self.ждать(lambda: self.page.locator("#app .center").count() == 0, 15000, "загрузка экрана")
 
     def click(self, selector_or_text):
@@ -507,6 +509,57 @@ def t_ideya(ctx, port, snimki):
     s2.page.goto(s2.base + "#/ideya")
     s2.ждать_текст("Форма пока не настроена")
     assert not s2.errors, s2.errors
+
+
+def t_dengi(ctx, port, snimki):
+    """Деньги: начало учёта, расход, доход, перевод, сверка, новый счёт, удаление строки — всё читает dengi.py."""
+    import datetime
+    s = Sayt(ctx, port).open()
+    s.go("#/dengi")
+    s.ждать_текст("Начало учёта")
+    s.page.fill("[data-st='Кошелёк']", "50")
+    s.page.fill("[data-st='Банк']", "1 200,50")
+    s.click("Начать учёт"); s.ждать_записи(2)
+    ym = datetime.date.today().strftime("%Y-%m")
+    fp = next(p for p in s.gh.files if p.endswith(f"/Деньги/10 {ym} Деньги.md"))
+    s.ждать_текст("Записать")
+    s.page.fill("#dnSum", "12,5"); s.page.select_option("#dnAcc2", "Банк"); s.page.fill("#dnStat", "Еда"); s.page.fill("#dnWhat", "рынок | овощи")
+    s.page.locator("[data-act='dengi:add']").click(); s.ждать_записи(3)
+    s.click("Доход")
+    s.page.fill("#dnSum", "900"); s.page.select_option("#dnAcc2", "Банк"); s.page.fill("#dnStat", "Зарплата")
+    s.page.locator("[data-act='dengi:add']").click(); s.ждать_записи(4)
+    s.click("Перевод")
+    s.page.fill("#dnSum", "100"); s.page.select_option("#dnFrom", "Банк"); s.page.select_option("#dnTo", "Кошелёк")
+    s.page.locator("[data-act='dengi:add']").click(); s.ждать_записи(5)
+    s.click("Расход")
+    s.page.fill("#dnSum", "3"); s.page.select_option("#dnAcc2", "Кошелёк"); s.page.fill("#dnStat", "Кофе")
+    s.page.locator("[data-act='dengi:add']").click(); s.ждать_записи(6)
+    s.page.on("dialog", lambda d: d.accept())
+    s.page.locator(".op", has_text="Кофе").locator("[data-act='dengi:del']").click(); s.ждать_записи(7)
+    s.page.locator("details summary", has_text="Сверка").click()
+    s.page.fill("[data-sv='Кошелёк']", "149")
+    s.click("Записать сверку"); s.ждать_записи(8)
+    s.page.locator("details summary", has_text="Счета:").click()
+    s.page.fill("#dnAcc", "Мне должны"); s.click("долг"); s.click("Добавить счёт"); s.ждать_записи(9)
+    t = s.gh.files[fp]
+    assert "| 12,50 | Банк | Расход: Еда | рынок / овощи |" in t and "| 900 | Доход: Зарплата | Банк |" in t and "| 100 | Банк | Кошелёк |" in t, t
+    assert "Кофе" not in t, "строка не удалилась"
+    assert "| Банк | 1200,50 |" in t and f"На: {datetime.date.today().isoformat()}" in t, t
+    assert "| Кошелёк | 149 |" in t
+    nas = next(p for p in s.gh.files if p.endswith("/Деньги/10 Деньги.md"))
+    assert "Мне должны: долг" in s.gh.files[nas]
+    d = kopiya({p: s.gh.files[p] for p, _ in s.gh.commits})
+    r = subprocess.run([sys.executable, ".github/scripts/dengi.py", "--write"], cwd=d, capture_output=True, text=True)
+    assert r.returncode == 0 and "✖" not in r.stdout, r.stdout
+    itog = (d / fp).read_text(encoding="utf-8")
+    s.gh.files[fp] = itog
+    s.go("#/dengi")
+    s.ждать_текст("Итоги месяца")
+    assert "−12,50" in s.page.inner_text(".ops") or "−12,5" in s.page.inner_text(".ops")
+    s.snimok(snimki, "dengi")
+    import shutil
+    shutil.rmtree(d.parent)
+    assert not s.errors, s.errors
 
 
 PROVERKI = {k[2:]: v for k, v in list(globals().items()) if k.startswith("t_")}

@@ -140,6 +140,11 @@ a.btn{text-decoration:none;display:inline-block}
 .print-doc .fm{font-size:11px;color:#555} .print-doc .path{font-family:var(--mono)} .print-doc article{break-inside:avoid-page}
 @media print{.top,.noprint,.toast,body::before{display:none!important} body{background:#fff} .wrap{max-width:none;padding:0} .print-doc{padding:0;border-radius:0}
   .print-doc section{break-before:page} .print-doc section:first-of-type{break-before:auto}}
+.ops{display:grid;gap:2px}
+.op{display:grid;grid-template-columns:38px minmax(0,1fr) auto 22px;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)}
+.op .num{font-size:14px;white-space:nowrap} .num.minus{color:var(--weak)} .num.plus{color:var(--strong)}
+select,input[type=date]{width:100%;font:15px var(--body);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px}
+.print-doc.dn{background:transparent;color:inherit;padding:8px 0 0} .print-doc.dn td,.print-doc.dn th{border-color:var(--line)}
 .center{min-height:50vh;display:grid;place-items:center;color:var(--muted)}
 ol.how{margin:0;padding-left:22px;display:grid;gap:8px;font-size:14px}
 ol.how a{color:var(--accent);word-break:break-all}
@@ -158,9 +163,11 @@ code{font-family:var(--mono);font-size:13px}
 <div class="toast" id="toast" hidden></div>
 
 <!-- Экраны: каждый — свой файл в docs/ekrany (window.EKRANY); грузятся до основного скрипта -->
-<!--EKRANY--><script src="ekrany/opros.js"></script>
+<!--EKRANY--><script src="ekrany/obshchee.js"></script>
+<script src="ekrany/opros.js"></script>
 <script src="ekrany/shag.js"></script>
 <script src="ekrany/nedelya.js"></script>
+<script src="ekrany/dengi.js"></script>
 <script src="ekrany/vygruzka.js"></script>
 <script src="ekrany/ideya.js"></script>
 <script src="ekrany/novoe.js"></script>
