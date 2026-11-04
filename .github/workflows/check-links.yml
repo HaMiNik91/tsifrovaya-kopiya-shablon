@@ -28,3 +28,5 @@ jobs:
         run: python3 .github/scripts/nedelya.py
       - name: Ветки событий
         run: python3 .github/scripts/vetki.py
+      - name: Цикл
+        run: python3 .github/scripts/tsikl.py

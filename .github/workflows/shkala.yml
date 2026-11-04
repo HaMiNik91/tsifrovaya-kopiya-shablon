@@ -12,9 +12,9 @@ name: Пересчёт оценок Шкалы и Медкарты
 on:
   push:
     branches: [main]
-    paths: ["10 Сферы/**", "00 Старт/Колесо баланса.md", ".github/scripts/shkala.py", ".github/scripts/instrumenty.py", ".github/scripts/dengi.py", "60 Помощники/**", ".github/scripts/sled_shag.py", "20 Журнал/**", ".github/scripts/nedelya.py", "70 Ветки/**", "80 Шаблоны/Ветки/**", ".github/scripts/vetki.py"]
+    paths: ["10 Сферы/**", "00 Старт/Колесо баланса.md", ".github/scripts/shkala.py", ".github/scripts/instrumenty.py", ".github/scripts/dengi.py", "60 Помощники/**", ".github/scripts/sled_shag.py", "20 Журнал/**", ".github/scripts/nedelya.py", "70 Ветки/**", "80 Шаблоны/Ветки/**", ".github/scripts/vetki.py", ".github/scripts/tsikl.py"]
   pull_request:
-    paths: ["10 Сферы/**", "00 Старт/Колесо баланса.md", ".github/scripts/shkala.py", ".github/scripts/instrumenty.py", ".github/scripts/dengi.py", "60 Помощники/**", ".github/scripts/sled_shag.py", "20 Журнал/**", ".github/scripts/nedelya.py", "70 Ветки/**", "80 Шаблоны/Ветки/**", ".github/scripts/vetki.py"]
+    paths: ["10 Сферы/**", "00 Старт/Колесо баланса.md", ".github/scripts/shkala.py", ".github/scripts/instrumenty.py", ".github/scripts/dengi.py", "60 Помощники/**", ".github/scripts/sled_shag.py", "20 Журнал/**", ".github/scripts/nedelya.py", "70 Ветки/**", "80 Шаблоны/Ветки/**", ".github/scripts/vetki.py", ".github/scripts/tsikl.py"]
   schedule:
     - cron: "17 4 * * *"
   workflow_dispatch:
@@ -45,6 +45,7 @@ jobs:
           python3 .github/scripts/instrumenty.py
           python3 .github/scripts/nedelya.py
           python3 .github/scripts/vetki.py
+          python3 .github/scripts/tsikl.py
       - name: Пересчитать и записать оценки
         if: github.event_name != 'pull_request'
         run: |
@@ -55,9 +56,10 @@ jobs:
           python3 .github/scripts/sled_shag.py --write
           python3 .github/scripts/nedelya.py --write
           python3 .github/scripts/vetki.py --write
+          python3 .github/scripts/tsikl.py --write
           if [ -n "$(git status --porcelain)" ]; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add -A && git commit -m "Пересчёт оценок Шкалы, Медкарты, Инструментов, Денег, Следующего шага, Плана недели и Веток (shkala.py, medkarta.py, instrumenty.py, dengi.py, sled_shag.py, nedelya.py, vetki.py)"
+            git add -A && git commit -m "Пересчёт оценок Шкалы, Медкарты, Инструментов, Денег, Следующего шага, Плана недели, Веток и Цикла (shkala.py, medkarta.py, instrumenty.py, dengi.py, sled_shag.py, nedelya.py, vetki.py, tsikl.py)"
             for i in 1 2 3; do git pull --rebase -q && git push && break; sleep 5; done
           fi
