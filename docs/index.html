@@ -22,7 +22,7 @@
   --bg:#F2F4F1; --panel:#FFFFFF; --ink:#16201B; --muted:#5E6B64; --line:#D9DFDA;
   --accent:#2C55C9; --accent-soft:#E3E9FA; --weak:#C2412D; --weak-soft:#F8E3DF;
   --strong:#1D7F51; --strong-soft:#DDF0E6; --warn:#9A6B00; --warn-soft:#F6EBCB;
-  --low:#B58900; --low-soft:#FBF0C9;
+  --low:#B58900; --low-soft:#FBF0C9; --mid:#6B7F93; --mid-soft:#E6ECF2;
   --display:"Unbounded","Arial Black",system-ui,sans-serif;
   --body:"Onest",system-ui,-apple-system,"Segoe UI",sans-serif;
   --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
@@ -31,12 +31,12 @@
   --bg:#111613; --panel:#19201C; --ink:#E7ECE8; --muted:#97A39C; --line:#2C3530;
   --accent:#7D9CF2; --accent-soft:#1E2846; --weak:#F0806C; --weak-soft:#3A1F1A;
   --strong:#5BC892; --strong-soft:#173226; --warn:#E3B34A; --warn-soft:#352A12;
-  --low:#F2CC4E; --low-soft:#3A3212; color-scheme:dark}}
+  --low:#F2CC4E; --low-soft:#3A3212; --mid:#9AABBD; --mid-soft:#232C36; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#111613; --panel:#19201C; --ink:#E7ECE8; --muted:#97A39C; --line:#2C3530;
   --accent:#7D9CF2; --accent-soft:#1E2846; --weak:#F0806C; --weak-soft:#3A1F1A;
   --strong:#5BC892; --strong-soft:#173226; --warn:#E3B34A; --warn-soft:#352A12;
-  --low:#F2CC4E; --low-soft:#3A3212; color-scheme:dark}
+  --low:#F2CC4E; --low-soft:#3A3212; --mid:#9AABBD; --mid-soft:#232C36; color-scheme:dark}
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
 body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
@@ -61,7 +61,7 @@ h2{font-family:var(--display);font-weight:500;font-size:17px;margin:0}
 .sub{color:var(--muted);font-size:13px;margin-top:4px}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .chip{font-size:12px;font-weight:600;padding:3px 8px;border-radius:999px;white-space:nowrap}
-.chip.weak{background:var(--weak-soft);color:var(--weak)} .chip.low{background:var(--low-soft);color:var(--low)} .chip.strong{background:var(--strong-soft);color:var(--strong)}
+.chip.weak{background:var(--weak-soft);color:var(--weak)} .chip.low{background:var(--low-soft);color:var(--low)} .chip.mid{background:var(--mid-soft);color:var(--mid)} .chip.strong{background:var(--strong-soft);color:var(--strong)}
 .chip.none{background:var(--line);color:var(--muted)}
 .radar{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:8px}
 .radar svg{display:block;width:100%;height:auto;max-width:610px;margin:0 auto}
@@ -75,9 +75,9 @@ h2{font-family:var(--display);font-weight:500;font-size:17px;margin:0}
 .row .name em{display:block;font-style:normal;font-size:12px;color:var(--muted);font-weight:400}
 .bar{height:8px;border-radius:4px;background:var(--line);overflow:hidden}
 .bar i{display:block;height:100%;background:var(--accent);border-radius:4px}
-.row.weak .bar i{background:var(--weak)} .row.low .bar i{background:var(--low)} .row.strong .bar i{background:var(--strong)}
+.row.weak .bar i{background:var(--weak)} .row.low .bar i{background:var(--low)} .row.strong .bar i{background:var(--strong)} .row.mid .bar i{background:var(--mid)}
 .num{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right;font-size:15px}
-.row.weak .num{color:var(--weak)} .row.low .num{color:var(--low)} .row.strong .num{color:var(--strong)}
+.row.weak .num{color:var(--weak)} .row.low .num{color:var(--low)} .row.strong .num{color:var(--strong)} .row.mid .num{color:var(--mid)}
 .arrow{color:var(--muted)}
 .calc{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:6px;overflow-wrap:anywhere}
 .legend{font-size:12px;color:var(--muted);margin:0}
@@ -650,13 +650,16 @@ function status(){
 window.addEventListener('beforeunload', e => { if (S.busy){ e.preventDefault(); e.returnValue = ''; } });
 
 // ───────── Рисование ─────────
-function rankClass(items){
+function scoreClass(v){ // цвет по самой оценке (решение пользователя 24.11.2026): 1–3 — красный, 4–6 — спокойный, 7–10 — зелёный
+  return v == null ? '' : v <= 3 ? 'weak' : v <= 6 ? 'mid' : 'strong';
+}
+function rankClass(items){ return i => scoreClass(i.score); }
+function extremes(items){ // самое низкое и самое высокое — для подписей «ниже всего» / «выше всего»
   const rated = items.filter(i => i.score != null);
-  if (rated.length < 2) return () => '';
+  if (rated.length < 2) return {lo: [], hi: []};
   const min = Math.min(...rated.map(i => i.score)), max = Math.max(...rated.map(i => i.score));
-  // Самое низкое: 5 и ниже — красное (weak), 6 и выше — жёлтое (low)
-  const lowCls = min <= 5 ? 'weak' : 'low';
-  return i => i.score == null || min === max ? '' : i.score === min ? lowCls : i.score === max ? 'strong' : '';
+  if (min === max) return {lo: [], hi: []};
+  return {lo: rated.filter(i => i.score === min), hi: rated.filter(i => i.score === max)};
 }
 function wrapLabel(name){
   const out = [''];
@@ -677,7 +680,7 @@ function radar(items){ // items: {name, label, score, href}
   s += `<polygon points="${items.map((it, i) => pt(i, it.score ?? 0).join(',')).join(' ')}" fill="var(--accent)" fill-opacity=".18" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>`;
   const cls = rankClass(items);
   items.forEach((it, i) => {
-    const c = cls(it), col = c === 'weak' ? 'var(--weak)' : c === 'low' ? 'var(--low)' : c === 'strong' ? 'var(--strong)' : 'var(--accent)';
+    const c = cls(it), col = c === 'weak' ? 'var(--weak)' : c === 'mid' ? 'var(--mid)' : c === 'strong' ? 'var(--strong)' : 'var(--accent)';
     s += `<a class="hit" href="${it.href}" aria-label="Открыть ${esc(it.name)}">`;
     const [hx, hy] = pt(i, 11); s += `<circle cx="${hx}" cy="${hy}" r="26" fill="transparent"/>`;
     if (it.score != null){ const [x, y] = pt(i, it.score); s += `<circle cx="${x}" cy="${y}" r="5" fill="${col}"/>`; }
@@ -697,8 +700,9 @@ function rows(items){ // items: {name, score, href, extra}
       <span class="num">${fmt(it.score)}</span><span class="arrow">›</span></a>`).join('') + `</div>`;
 }
 function chips(items){
-  const cls = rankClass(items), none = items.filter(i => i.score == null).length;
-  return `<div class="chips">${items.filter(i => cls(i) === 'weak').map(i => `<span class="chip weak">слабое: ${esc(i.name)}</span>`).join('')}${items.filter(i => cls(i) === 'low').map(i => `<span class="chip low">ниже других: ${esc(i.name)}</span>`).join('')}${items.filter(i => cls(i) === 'strong').map(i => `<span class="chip strong">сильное: ${esc(i.name)}</span>`).join('')}${none ? `<span class="chip none">без оценки: ${none}</span>` : ''}</div>`;
+  const {lo, hi} = extremes(items), none = items.filter(i => i.score == null).length;
+  const chip = (it, w) => `<span class="chip ${scoreClass(it.score)}">${w}: ${esc(it.name)}</span>`;
+  return `<div class="chips">${lo.map(i => chip(i, 'ниже всего')).join('')}${hi.map(i => chip(i, 'выше всего')).join('')}${none ? `<span class="chip none">без оценки: ${none}</span>` : ''}</div>`;
 }
 function head(score, title, sub, items, label, calc){
   // экран без своей цифры (опросник, выгрузка, форма) — только заголовок, без пустого «—»
