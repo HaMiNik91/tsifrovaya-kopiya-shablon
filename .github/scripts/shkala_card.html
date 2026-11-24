@@ -10,7 +10,7 @@
   --bg:#F2F4F1; --panel:#FFFFFF; --ink:#16201B; --muted:#5E6B64; --line:#D9DFDA;
   --accent:#2C55C9; --accent-soft:#E3E9FA; --weak:#C2412D; --weak-soft:#F8E3DF;
   --strong:#1D7F51; --strong-soft:#DDF0E6; --warn:#9A6B00; --warn-soft:#F6EBCB;
-  --low:#B58900; --low-soft:#FBF0C9; --approx:#7A4FB5; --approx-soft:#EFE7F8;
+  --low:#B58900; --low-soft:#FBF0C9; --mid:#6B7F93; --mid-soft:#E6ECF2; --approx:#7A4FB5; --approx-soft:#EFE7F8;
   --display:"Unbounded","Arial Black",system-ui,sans-serif;
   --body:"Onest",system-ui,-apple-system,"Segoe UI",sans-serif;
   --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
@@ -19,12 +19,12 @@
   --bg:#111613; --panel:#19201C; --ink:#E7ECE8; --muted:#97A39C; --line:#2C3530;
   --accent:#7D9CF2; --accent-soft:#1E2846; --weak:#F0806C; --weak-soft:#3A1F1A;
   --strong:#5BC892; --strong-soft:#173226; --warn:#E3B34A; --warn-soft:#352A12;
-  --low:#F2CC4E; --low-soft:#3A3212; --approx:#BE9DF0; --approx-soft:#2C2140; color-scheme:dark}}
+  --low:#F2CC4E; --low-soft:#3A3212; --mid:#9AABBD; --mid-soft:#232C36; --approx:#BE9DF0; --approx-soft:#2C2140; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#111613; --panel:#19201C; --ink:#E7ECE8; --muted:#97A39C; --line:#2C3530;
   --accent:#7D9CF2; --accent-soft:#1E2846; --weak:#F0806C; --weak-soft:#3A1F1A;
   --strong:#5BC892; --strong-soft:#173226; --warn:#E3B34A; --warn-soft:#352A12;
-  --low:#F2CC4E; --low-soft:#3A3212; --approx:#BE9DF0; --approx-soft:#2C2140; color-scheme:dark}
+  --low:#F2CC4E; --low-soft:#3A3212; --mid:#9AABBD; --mid-soft:#232C36; --approx:#BE9DF0; --approx-soft:#2C2140; color-scheme:dark}
 body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.45}
 .wrap{max-width:720px;margin:0 auto;padding-inline:16px;padding-block:16px 40px;display:grid;gap:16px}
 .crumbs{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:13px;color:var(--muted)}
@@ -39,7 +39,7 @@ h1{font-family:var(--display);font-weight:500;font-size:22px;margin:0;text-wrap:
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .chip{font-size:12px;font-weight:600;padding:3px 8px;border-radius:999px;white-space:nowrap}
 .chip.weak{background:var(--weak-soft);color:var(--weak)} .chip.strong{background:var(--strong-soft);color:var(--strong)}
-.chip.low{background:var(--low-soft);color:var(--low)} .chip.warn{background:var(--warn-soft);color:var(--warn)} .chip.none{background:var(--line);color:var(--muted)}
+.chip.low{background:var(--low-soft);color:var(--low)} .chip.mid{background:var(--mid-soft);color:var(--mid)} .chip.warn{background:var(--warn-soft);color:var(--warn)} .chip.none{background:var(--line);color:var(--muted)}
 .radar{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:8px}
 .radar svg{display:block;width:100%;height:auto;max-width:610px;margin:0 auto}
 .rows{display:grid;gap:2px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:6px}
@@ -51,9 +51,9 @@ h1{font-family:var(--display);font-weight:500;font-size:22px;margin:0;text-wrap:
 .row .name em{display:block;font-style:normal;font-size:12px;color:var(--muted);font-weight:400}
 .bar{height:8px;border-radius:4px;background:var(--line);overflow:hidden}
 .bar i{display:block;height:100%;background:var(--accent);border-radius:4px}
-.row.weak .bar i{background:var(--weak)} .row.low .bar i{background:var(--low)} .row.strong .bar i{background:var(--strong)}
+.row.weak .bar i{background:var(--weak)} .row.low .bar i{background:var(--low)} .row.strong .bar i{background:var(--strong)} .row.mid .bar i{background:var(--mid)}
 .num{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right;font-size:15px}
-.row.weak .num{color:var(--weak)} .row.low .num{color:var(--low)} .row.strong .num{color:var(--strong)}
+.row.weak .num{color:var(--weak)} .row.low .num{color:var(--low)} .row.strong .num{color:var(--strong)} .row.mid .num{color:var(--mid)}
 /* «примерно» — оценка только по общему вопросу сферы (CLAUDE.md, п. 5.4, `точность`): свой цвет поверх слабого и сильного */
 .row.approx .bar i{background:repeating-linear-gradient(45deg,var(--approx) 0 4px,var(--approx-soft) 4px 7px)}
 .row.approx .num{color:var(--approx)}
@@ -117,13 +117,16 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;
 const fmt = v => v == null ? '—' : String(v).replace('.', ',');
 const hasLevels = o => o.levels && Object.keys(o.levels).length;
 
-function rankClass(items){
+function scoreClass(v){ // цвет по самой оценке (решение пользователя 24.11.2026): 1–3 — красный, 4–6 — спокойный, 7–10 — зелёный
+  return v == null ? '' : v <= 3 ? 'weak' : v <= 6 ? 'mid' : 'strong';
+}
+function rankClass(items){ return i => scoreClass(i.score); }
+function extremes(items){ // самое низкое и самое высокое — для подписей «ниже всего» / «выше всего»
   const rated = items.filter(i => i.score != null);
-  if (rated.length < 2) return () => '';
+  if (rated.length < 2) return {lo: [], hi: []};
   const min = Math.min(...rated.map(i => i.score)), max = Math.max(...rated.map(i => i.score));
-  // Самое низкое: 5 и ниже — красное (weak), 6 и выше — жёлтое (low) — решение пользователя 25.10.2026
-  const lowCls = min <= 5 ? 'weak' : 'low';
-  return i => i.score == null || min === max ? '' : i.score === min ? lowCls : i.score === max ? 'strong' : '';
+  if (min === max) return {lo: [], hi: []};
+  return {lo: rated.filter(i => i.score === min), hi: rated.filter(i => i.score === max)};
 }
 
 // Правило округления пользователя: дробная часть до ,5 включительно — вниз, больше ,5 — вверх
@@ -155,7 +158,7 @@ function radar(items, tappable){
   s += `<polygon points="${shape}" fill="var(--accent)" fill-opacity=".18" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>`;
   const cls = rankClass(items);
   items.forEach((it,i) => {
-    const c = cls(it), col = it.approx === true ? 'var(--approx)' : c==='weak' ? 'var(--weak)' : c==='low' ? 'var(--low)' : c==='strong' ? 'var(--strong)' : 'var(--accent)';
+    const c = cls(it), col = it.approx === true ? 'var(--approx)' : c==='weak' ? 'var(--weak)' : c==='mid' ? 'var(--mid)' : c==='strong' ? 'var(--strong)' : 'var(--accent)';
     const deeper = tappable && canOpen(it);
     s += deeper ? `<g class="hit" data-i="${i}" tabindex="0" role="button" aria-label="Открыть ${esc(it.name)}">` : '<g>';
     if (deeper){ const [hx,hy] = pt(i, 11); s += `<circle cx="${hx}" cy="${hy}" r="26" fill="transparent"/>`; }
@@ -180,7 +183,7 @@ function rows(items, onTap){
     const list = rn ? it.rays : zn ? it.zones : it.signs || [];
     const rated = list.filter(x => x.score != null).length;
     const total = rn || zn || sn, word = rn ? 'лучей' : zn ? 'зон' : 'признаков';
-    let extra = it.score == null ? (total ? `не оценено, 0 из ${total}` : 'не оценено')
+    let extra = it.na ? 'не относится' : it.score == null ? (total ? `не оценено, 0 из ${total}` : 'не оценено')
       : total ? (rated < total ? `оценено ${rated} из ${total} ${word}` : `${total} ${word}`) : '';
     if (it.approx === true && it.score != null) extra = (extra ? extra + ' · ' : '') + 'примерно';
     else if (it.approx > 0) extra = (extra ? extra + ' · ' : '') + `примерных лучей: ${it.approx}`;
@@ -224,11 +227,10 @@ function ladder(title, levels, score, leaf, unitLabel){
 }
 
 function chips(items){
-  const rated = items.filter(i => i.score != null), cls = rankClass(items);
-  const w = rated.filter(i => cls(i)==='weak').map(i=>i.name), lo = rated.filter(i => cls(i)==='low').map(i=>i.name), st = rated.filter(i => cls(i)==='strong').map(i=>i.name);
-  const none = items.filter(i => i.score == null).map(i=>i.name);
+  const {lo, hi} = extremes(items), chip = (it, w) => `<span class="chip ${scoreClass(it.score)}">${w}: ${esc(it.name)}</span>`;
+  const none = items.filter(i => i.score == null && !i.na).map(i=>i.name);
   const ap = path.length ? 0 : items.filter(i => i.approx === true && i.score != null).length;  // внутри луча — заметка, а не значок
-  return `<div class="chips">${ap?`<span class="chip approx">примерно: ${ap}</span>`:''}${w.map(n=>`<span class="chip weak">слабое: ${esc(n)}</span>`).join('')}${lo.map(n=>`<span class="chip low">ниже других: ${esc(n)}</span>`).join('')}${st.map(n=>`<span class="chip strong">сильное: ${esc(n)}</span>`).join('')}${none.length?`<span class="chip none">без оценки: ${none.length}</span>`:''}</div>`;
+  return `<div class="chips">${ap?`<span class="chip approx">примерно: ${ap}</span>`:''}${lo.map(i => chip(i, 'ниже всего')).join('')}${hi.map(i => chip(i, 'выше всего')).join('')}${none.length?`<span class="chip none">без оценки: ${none.length}</span>`:''}</div>`;
 }
 
 function crumbs(){
