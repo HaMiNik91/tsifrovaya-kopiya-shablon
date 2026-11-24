@@ -4,17 +4,20 @@
 // Шаг 2 — уточнения (`уточнить`): простой ответ → кусок линейки полными словами → свой уровень.
 //   Луч без зон уточнён — `точность` пустая; зона уточнена — луч остаётся «примерно».
 // В начале — «Есть пара?» и «Есть дети?»: без пары скрывается луч «Совместная жизнь» (06.04),
-//   без детей не трогается зона «Свои дети» (07.01) — у неё остаётся `нет`.
+//   без детей не трогается зона «Свои дети» (07.01) — у неё остаётся `нет`. Ответ «нет» включает запасные
+//   варианты вопросов сферы (`вопрос без пары`, `ступени без пары`, `уточнить без пары`; так же «без детей»), если они есть.
+// У уточнения свои три ответа: «КОД / Зона — вопрос || хорошо | средне | плохо»; кнопки — от хорошего к плохому.
 'use strict';
 (window.EKRANY = window.EKRANY || {}).opros = (() => {
   const DIR = '80 Шаблоны/Опросник/';
   const PARA = '06.04', DETI = {kod: '07.01', zone: 'Свои дети'};
-  const KUSKI = {plo: [1, 4, 'Скорее плохо'], sre: [4, 7, 'Средне'], hor: [7, 10, 'Хорошо']};
+  const KUSKI = {hor: [7, 10, 'Хорошо'], sre: [4, 7, 'Средне'], plo: [1, 4, 'Скорее плохо']}; // порядок кнопок: хорошее — первым (слева)
   const st = {i: null, bucket: null};
   const key = () => `op.${S.owner || 'demo'}/${S.repo || ''}`;
   const pos = () => { if (st.i == null){ const v = parseInt(LS.get(key() + '.i'), 10); st.i = isFinite(v) ? v : 0; } return st.i; };
   const go = i => { st.i = i; st.bucket = null; LS.set(key() + '.i', String(i)); render(); scrollTo(0, 0); };
   const noKids = () => LS.get(key() + '.deti') === 'нет';
+  const noPair = () => LS.get(key() + '.para') === 'нет';
 
   const lines = v => Array.isArray(v) ? v : (v ? [v] : []);
   const rayBy = kod => { for (const sp of S.spheres) for (const r of sp.rays) if (r.kod === kod) return {sp, r}; return null; };
@@ -22,9 +25,12 @@
     const p = S.paths.find(x => x.startsWith(DIR) && /^\d\d Опросник\.md$/.test(x.slice(DIR.length)) && readFm(view(x) || '')['код'] === sp.kod);
     if (!p) return null;
     const fm = readFm(view(p));
-    const stup = lines(fm['ступени']).map(s => s.match(/^(\d+) — (.+)$/)).filter(Boolean).map(m => ({lvl: +m[1], text: m[2]}));
-    const ut = lines(fm['уточнить']).map(s => s.match(/^(\d{2}\.\d{2})(?: \/ (.+?))? — (.+)$/)).filter(Boolean).map(m => ({kod: m[1], zone: m[2] || null, q: m[3]}));
-    return {q: fm['вопрос'] || '', stup, ut};
+    const suf = [noPair() && ' без пары', noKids() && ' без детей'].filter(Boolean);
+    const v = k => { for (const x of suf) if (fm[k + x]) return fm[k + x]; return fm[k]; }; // запасной вариант, если пары (детей) нет
+    const stup = lines(v('ступени')).map(s => s.match(/^(\d+) — (.+)$/)).filter(Boolean).map(m => ({lvl: +m[1], text: m[2]}));
+    const ut = lines(v('уточнить')).map(s => s.match(/^(\d{2}\.\d{2})(?: \/ (.+?))? — (.+?)(?: \|\| (.+))?$/)).filter(Boolean)
+      .map(m => { const o = (m[4] || '').split(' | ').map(x => x.trim()); return {kod: m[1], zone: m[2] || null, q: m[3], otv: o.length === 3 && o.every(Boolean) ? o : null}; });
+    return {q: v('вопрос') || '', stup, ut};
   }
   function steps(){ // весь путь: начало, пара, дети, по сфере — общий вопрос и уточнения (у зоны с признаками — по признаку), конец
     const out = [{k: 'intro'}, {k: 'para'}, {k: 'deti'}];
@@ -81,7 +87,7 @@
     if (s.k === 'intro') return card(s, `${head(null, 'Опросник', 'Колесо за 10–15 минут: один вопрос на сферу и 2–3 уточнения', null, 'старт', '')}${demo}
       <div class="card"><p class="desc" style="color:inherit"><b>Оценки примерные.</b> Потом зайдите в каждую сферу и проверьте линейки — точную оценку даёт только чтение всей линейки.</p>
       <p class="legend">Любой вопрос можно пропустить и вернуться к нему позже. Уже поставленные оценки опросник не меняет. Можно прерваться — страница запомнит, где вы остановились.</p>
-      <div class="pick"><button class="btn main" data-act="opros:go" data-i="1">Начать</button></div></div>`);
+      <div class="pick"><button class="btn main" data-act="opros:go" data-i="1">Начать</button><a class="btn" href="#/">Сначала посмотреть колесо</a></div></div>`);
     if (s.k === 'para') return card(s, `<div class="card"><h2>Есть ли у вас сейчас пара?</h2>
       <p class="legend">Если пары нет, луч «Совместная жизнь» скроется — его можно вернуть в сфере 06.</p>
       <div class="pick"><button class="btn" data-act="opros:para" data-v="да">Есть</button><button class="btn" data-act="opros:para" data-v="нет">Нет</button><button class="btn" data-act="opros:go" data-i="${i + 1}">Пропустить</button>${back(i)}</div></div>`);
@@ -99,7 +105,7 @@
       const who = s.sign ? ` — ${s.sign.name}` : '', cur = leafScore(s);
       let h = `<div class="card"><h2>${esc(s.u.q)}${esc(who)}</h2><p class="legend">Луч «${esc(s.ray.name)}»${s.zone ? `, зона «${esc(s.zone.name)}»` : ''}${cur != null ? ` · сейчас ${cur}${s.ray.approx ? ' (примерно)' : ''}` : ''}</p>`;
       if (!st.bucket){
-        h += `<div class="pick">${Object.entries(KUSKI).map(([k, v]) => `<button class="btn" data-act="opros:bucket" data-v="${k}">${v[2]}</button>`).join('')}</div>`;
+        h += `<div class="pick otv">${Object.entries(KUSKI).map(([k, v], n) => `<button class="btn" data-act="opros:bucket" data-v="${k}">${esc(s.u.otv ? s.u.otv[n] : v[2])}</button>`).join('')}</div>`;
         return card(s, h + skipBtns(i, !!s.sign) + `</div>`);
       }
       const [lo, hi] = KUSKI[st.bucket], o = ladderSpec(s.sp, s.ray, s.zone, s.sign);

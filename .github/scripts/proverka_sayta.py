@@ -44,6 +44,7 @@ class Gh:
     """Подменённый GitHub: файлы хранилища в памяти, запись — коммитом в память."""
 
     def __init__(self, nachalo=None):
+        self.shablon = False  # True — хранилище помечено как шаблон (is_template)
         out = subprocess.run(["git", "ls-files", "-z"], cwd=ROOT, capture_output=True, check=True).stdout
         self.files = {}
         for rel in out.decode("utf-8").split("\0"):
@@ -75,7 +76,7 @@ class Gh:
             return route.fulfill(status=204, headers={"Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "*",
                                                       "Access-Control-Allow-Methods": "GET, PUT, POST"})
         if path == base and m == "GET":
-            return ok({"default_branch": "main", "permissions": {"push": True}})
+            return ok({"default_branch": "main", "permissions": {"push": True}, "is_template": self.shablon})
         if path.startswith(base + "/git/trees/"):
             return ok({"tree": [{"path": p, "type": "blob", "sha": sha_of(t)} for p, t in sorted(self.files.items())]})
         if path.startswith(base + "/git/blobs/"):
@@ -285,6 +286,7 @@ def t_novoe(ctx, port, snimki):
     s.page.unroute("https://raw.githubusercontent.com/**")
     s.page.route("https://raw.githubusercontent.com/**", lambda r, q: r.fulfill(status=200, body=old, headers={"Access-Control-Allow-Origin": "*"}))
     s.gh.files[f] = old.replace(f'версия: "{tv}"', 'версия: "1.0"', 1)
+    s.page.add_init_script(f"try{{localStorage.setItem('op.{OWNER}/{REPO}.auto','1')}}catch(e){{}}")  # опросник уже предлагали — сразу колесо
     s.open()
     s.ждать_текст("Вышла версия")
     s.go("#/novoe")
@@ -303,7 +305,8 @@ def t_opros(ctx, port, snimki):
     g = s.gh.files
     para = next(p for p, t in g.items() if fm_get(t, "код") == "06.04" and fm_get(t, "тип") == "луч")
     deti = next(p for p, t in g.items() if fm_get(t, "код") == "07.01" and fm_get(t, "тип") == "луч")
-    s.go("#/opros")
+    s.ждать_текст("Начать")  # новый человек без оценок попадает в опросник сразу
+    assert "#/opros" in s.page.url, s.page.url
     s.snimok(snimki, "opros-start")
     s.click("Начать")
     s.ждать_текст("Есть ли у вас сейчас пара")
@@ -323,7 +326,9 @@ def t_opros(ctx, port, snimki):
             continue
         assert all(x.endswith(": 5") for x in fm_get(t, "оценки")), (p, fm_get(t, "оценки"))
         assert fm_get(t, "точность") == "примерно", p
-    s.click("Средне")
+    knopki = s.page.locator("[data-act='opros:bucket']").all_inner_texts()
+    assert knopki[0].startswith("Да, бодр") and knopki[2].startswith("Устаю"), knopki  # свои ответы, хорошее — первым
+    s.click("[data-act='opros:bucket'][data-v='sre']")
     s.ждать_текст("берите нижний")
     s.snimok(snimki, "opros-kusok")
     s.click("[data-act='opros:lvl'][data-v='6']")
@@ -333,12 +338,25 @@ def t_opros(ctx, port, snimki):
     assert fm_get(t, "оценки")[0].endswith(": 6") and not fm_get(t, "точность"), (fm_get(t, "оценки"), fm_get(t, "точность"))
     # уточнение зоны: луч остаётся «примерно»
     s.ждать_текст("Как вы спите")
-    s.click("Хорошо")
+    s.snimok(snimki, "opros-otvety")
+    s.click("[data-act='opros:bucket'][data-v='hor']")
     s.click("[data-act='opros:lvl'][data-v='8']")
     s.ждать_записи()
     son = next(p for p in sfera01 if fm_get(s.gh.files[p], "код") == "01.07")
     assert "Сон: 8" in " ".join(fm_get(s.gh.files[son], "оценки")) and fm_get(s.gh.files[son], "точность") == "примерно"
     assert fm_get(s.gh.files[para], "скрыт") == "true", "без пары луч 06.04 не скрыт"
+    # сфера 06 без пары: запасной вариант вопросов
+    for _ in range(40):
+        if "· 06 " in s.page.inner_text(".sub") and s.page.locator("[data-act='opros:main']").count():
+            break
+        s.click("Пропустить")
+    assert "без пары" in s.text(), s.text()[:200]
+    s.snimok(snimki, "opros-bez-pary")
+    s.click("Пропустить")
+    s.ждать_текст("Готовы ли вы к отношениям сейчас")
+    s.click("Пропустить")
+    s.click("Пропустить")
+    s.ждать_текст("Вспомните последние отношения")
     # дошли до сферы 07: общий ответ не трогает «Свои дети»
     for _ in range(40):
         if "· 07 семья" in s.page.inner_text(".sub").lower() and s.page.locator("[data-act='opros:main']").count():
@@ -359,6 +377,18 @@ def t_opros(ctx, port, snimki):
     s.programmy("shkala.py", "oprosnik.py", "sled_shag.py")
     assert not s.errors, s.errors
     s.snimok(snimki, "opros-priznak")
+
+
+def t_shablon(ctx, port, snimki):
+    """Хранилище-шаблон (is_template): страница не загружает его для записи и предлагает создать копию."""
+    s = Sayt(ctx, port)
+    s.gh.shablon = True
+    s.open()
+    s.ждать_текст("в него ответы не сохраняются")
+    assert s.page.locator("a", has_text="Создать свою копию").get_attribute("href").endswith("/generate")
+    assert not s.gh.commits, s.gh.commits
+    s.snimok(snimki, "shablon")
+    assert not s.errors, s.errors
 
 
 def kopiya(files):

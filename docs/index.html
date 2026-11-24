@@ -108,6 +108,7 @@ textarea{min-height:90px;resize:vertical}
 label{font-size:13px;font-weight:600;display:grid;gap:6px}
 .pick{display:flex;gap:6px;flex-wrap:wrap}
 .pick button{min-width:42px}
+.pick.otv{display:grid;gap:6px} .pick.otv .btn{text-align:left;white-space:normal;justify-content:flex-start;line-height:1.35;padding-block:12px} /* ответы опросника: столбиком, хорошее — сверху */
 .pick button.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
 .step{background:var(--strong-soft);border-radius:14px;padding:14px;display:grid;gap:10px}
 .step b.t{font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--strong)}
@@ -124,6 +125,7 @@ details .prose{margin-top:8px}
 .toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);max-width:calc(100% - 32px);background:var(--ink);color:var(--bg);padding:10px 14px;border-radius:10px;font-size:14px;z-index:9;box-shadow:0 4px 16px rgba(0,0,0,.2)}
 .card.tw{grid-template-columns:minmax(0,1fr) 14px;color:inherit;text-decoration:none;gap:2px 10px}
 .card.tw span:not(.arrow){grid-column:1;font-size:13px;color:var(--muted)} .card.tw .arrow{grid-column:2;grid-row:1/3;align-self:center}
+.card.tw.first{background:var(--accent-soft);border-color:var(--accent)} .card.tw.first b{color:var(--accent);font-size:17px} .card.tw.first span:not(.arrow){color:var(--ink)}
 .twh{display:flex;justify-content:space-between;gap:10px;align-items:baseline} .twh a{color:var(--ink);font-weight:600;text-decoration:none}
 .opr{display:grid;gap:2px}
 h2 a{color:var(--accent)}
@@ -536,7 +538,7 @@ async function appRepos(){ // хранилища, на которые челов
   for (const i of inst.installations || []){
     if (i.app_slug && S.app && i.app_slug !== S.app.slug) continue;
     const r = await gh('GET', `/user/installations/${i.id}/repositories?per_page=100`);
-    for (const x of r.repositories || []) out.push({full: x.full_name, push: !x.permissions || x.permissions.push !== false});
+    for (const x of r.repositories || []) out.push({full: x.full_name, push: !x.permissions || x.permissions.push !== false, tpl: !!x.is_template});
   }
   return out;
 }
@@ -565,6 +567,7 @@ async function loadLive(){
   const info = await gh('GET', `/repos/${S.owner}/${S.repo}`);
   S.branch = LS.get('tk.branch') || info.default_branch; // tk.branch — только для проверок на отдельной ветке
   if (info.permissions && info.permissions.push === false) throw Object.assign(new Error('ключ не даёт права записи в это хранилище'), {status: 403});
+  if (info.is_template) throw Object.assign(new Error('это общий шаблон «Цифровой копии» — в него ответы не сохраняются'), {tpl: `${S.owner}/${S.repo}`}); // шаблон открыт всем: личное — только в своей копии
   const tree = await gh('GET', `/repos/${S.owner}/${S.repo}/git/trees/${encodeURIComponent(S.branch)}?recursive=1`);
   S.paths = tree.tree.filter(x => x.type === 'blob').map(x => x.path);
   const need = S.paths.filter(wanted);
@@ -808,11 +811,14 @@ function wheelView(){
   const items = S.spheres.map(s => ({name: `${s.nn} ${s.name}`, label: s.name, score: s.score, href: `#/${s.nn}`, extra: extra(s.rated, s.rays.length, 'лучей', s.score)}));
   let h = (S.mode !== 'live' ? `<div class="note">Демо: так выглядит пустой шаблон. Оценки и правки здесь не сохраняются. Чтобы заполнять своё, <a href="#/vhod">войдите в своё хранилище</a>.</div>` : '');
   h += head(w.score, 'Колесо сфер', `Среднее по ${w.rated} сферам из ${S.spheres.length}`, items, 'жизнь', w.calc);
+  const op = EK.opros && EK.opros.menu, opFirst = !!(op && S.spheres.some(s => s.rays.some(r => r.score == null))); // пока есть лучи без оценки — опросник первым
+  const card = (k, e, cls) => `<a class="card tw${cls}" href="#/${k}"><b>${esc(e.menu.title)}</b><span>${esc(typeof e.menu.sub === 'function' ? e.menu.sub() : e.menu.sub)}</span><span class="arrow">›</span></a>`;
+  if (opFirst) h += card('opros', EK.opros, ' first');
   h += radar(items) + rows(items);
   const tw = S.spheres.filter(s => s.prio != null).sort((a, b) => a.prio - b.prio);
   h += `<a class="card tw" href="#/vremya"><b>Время и внимание</b><span>${tw.length ? 'Приоритеты: ' + tw.map(s => `${s.prio} — ${esc(s.name)}`).join(', ') : 'Какие сферы двигать первыми и сколько часов в неделю на каждую'}</span><span class="arrow">›</span></a>`;
-  h += Object.entries(EK).filter(([, e]) => e.menu).sort((a, b) => a[1].menu.order - b[1].menu.order)
-    .map(([k, e]) => `<a class="card tw" href="#/${k}"><b>${esc(e.menu.title)}</b><span>${esc(typeof e.menu.sub === 'function' ? e.menu.sub() : e.menu.sub)}</span><span class="arrow">›</span></a>`).join('');
+  h += Object.entries(EK).filter(([k, e]) => e.menu && !(opFirst && k === 'opros')).sort((a, b) => a[1].menu.order - b[1].menu.order)
+    .map(([k, e]) => card(k, e, '')).join('');
   if (S.hidden.length) h += hiddenBlock('Скрытые сферы', S.hidden.map(s => ({name: `${s.nn} ${s.name}`, act: 'unhideSphere', id: s.dir})));
   return h + `<p class="legend">Нажмите на сферу: откроются её лучи. Оценку ставите только внизу — на линейке уровней; всё выше страница считает сама: среднее, ,5 и меньше — вниз, больше ,5 — вверх.</p>`;
 }
@@ -906,7 +912,7 @@ function loginView(){
         <li>Выберите <b>Only select repositories</b> (Только выбранные хранилища) и отметьте своё хранилище. Больше никакие не отмечайте.</li>
         <li>Нажмите <b>Install</b> (Установить). GitHub вернёт вас сюда.</li></ol>
         <div class="pick"><a class="btn main" href="${install}">Поставить на хранилище</a><button class="btn" data-act="repos">Я уже поставил — проверить</button></div></div>`;
-      else h += `<div class="card"><p class="desc">Выберите хранилище:</p><div class="pick">${S.repos.map(r => `<button class="btn${r.full === repo ? ' main' : ''}" data-act="pickRepo" data-repo="${esc(r.full)}">${esc(r.full)}</button>`).join('')}</div>
+      else h += `<div class="card"><p class="desc">Выберите хранилище:</p><div class="pick">${S.repos.map(r => r.tpl ? `<button class="btn" disabled title="Общий шаблон — в него ответы не сохраняются">${esc(r.full)} — шаблон</button>` : `<button class="btn${r.full === repo ? ' main' : ''}" data-act="pickRepo" data-repo="${esc(r.full)}">${esc(r.full)}</button>`).join('')}</div>${S.repos.some(r => r.tpl) ? `<p class="legend">Хранилище с пометкой «шаблон» — общий шаблон для всех; в него ответы не сохраняются. Нужна своя копия — <a href="https://github.com/${esc(S.repos.find(r => r.tpl).full)}/generate" target="_blank" rel="noopener">создать из шаблона</a> (кнопка «Create repository» — «Создать хранилище», видимость «Private» — «Закрытое»).</p>` : ''}
         <p class="legend">Нет нужного? <a href="${install}">Поставьте приложение и на него</a>.</p></div>`;
     }
     if (S.via !== 'app') h += `<div class="card"><button class="btn main" data-act="oauth">Войти через GitHub</button>
@@ -1042,7 +1048,7 @@ async function start(mode){
     // вход через GitHub: хранилище — из списка, где стоит приложение
     try {
       if (S.repos == null){ render(); S.repos = await appRepos(); }
-      const saved = LS.get('tk.repo'), ok = S.repos.filter(r => r.push);
+      const saved = LS.get('tk.repo'), ok = S.repos.filter(r => r.push && !r.tpl);
       if (ok.length === 1) LS.set('tk.repo', ok[0].full);
       else if (!ok.some(r => r.full === saved)) LS.set('tk.repo', null);
       if (LS.get('tk.repo') && route()[0] === 'vhod') history.replaceState(null, '', location.pathname + '#/'); // хранилище есть — сразу к колесу
@@ -1063,15 +1069,21 @@ async function start(mode){
     S.mode = mode; for (const k in EK) EK[k].loaded = false; build(); status();
     for (const k in EK) if (EK[k].fon) EK[k].fon(); // фоновая подготовка экранов (например, «вышла новая версия»)
     if (route()[0] === 'vhod' && mode !== 'live') location.hash = '#/';
+    if (mode === 'live' && !route()[0] && EK.opros && S.spheres.length && [...S.spheres, ...S.hidden].every(x => x.rays.every(r => r.score == null))){
+      const k = `op.${S.owner}/${S.repo}.auto`; // новый человек без единой оценки: сначала опросник (один раз на хранилище)
+      if (!LS.get(k)){ LS.set(k, '1'); history.replaceState(null, '', location.pathname + location.search + '#/opros'); }
+    }
     render();
   } catch(e){
     S.mode = null; status();
-    const app = S.via === 'app';
-    const why = e.status === 401 ? (app ? 'Вход через GitHub устарел — войдите ещё раз.' : 'GitHub не принял ключ: он неверный или срок кончился. Создайте новый.')
-      : e.status === 404 ? (app ? 'Хранилище не найдено, или приложение на него не поставлено.' : 'Хранилище не найдено, или ключ не даёт к нему доступа (проверьте шаг «Repository access»).')
-      : e.status === 403 ? (app ? `Нет прав: ${e.message}.` : `Нет прав: ${e.message}. Проверьте шаг «Permissions» — Contents: Read and write.`)
+    const viaApp = S.via === 'app'; // не `app`: это имя занято элементом страницы
+    const why = e.status === 401 ? (viaApp ? 'Вход через GitHub устарел — войдите ещё раз.' : 'GitHub не принял ключ: он неверный или срок кончился. Создайте новый.')
+      : e.status === 404 ? (viaApp ? 'Хранилище не найдено, или приложение на него не поставлено.' : 'Хранилище не найдено, или ключ не даёт к нему доступа (проверьте шаг «Repository access»).')
+      : e.status === 403 ? (viaApp ? `Нет прав: ${e.message}.` : `Нет прав: ${e.message}. Проверьте шаг «Permissions» — Contents: Read and write.`)
       : e.message;
-    app.innerHTML = `<div class="note err">${esc(why)}</div>` + loginView();
+    const tpl = e.tpl ? ` <a href="https://github.com/${esc(e.tpl)}/generate" target="_blank" rel="noopener">Создать свою копию из шаблона</a> (кнопка «Create repository» — «Создать хранилище», видимость «Private» — «Закрытое»), поставить на неё приложение и выбрать её здесь.` : '';
+    if (e.tpl) LS.set('tk.repo', null);
+    app.innerHTML = `<div class="note err">${esc(why)}${tpl ? '.' + tpl : ''}</div>` + loginView();
   }
 }
 window.addEventListener('hashchange', () => { S.ui = {}; render(); scrollTo(0, 0); });
