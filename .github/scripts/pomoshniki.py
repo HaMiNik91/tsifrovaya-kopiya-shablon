@@ -15,6 +15,7 @@
   • `помощь` — совет · практика · инструмент; `научность` — проверено · частично · популярное
     (пусто — предупреждение);
   • в тексте — ссылка «Луч: [[…]]» на файл луча с этим кодом (иначе предупреждение: луч переименован?);
+    лучи невключённых модулей ищутся в «80 Шаблоны/Модули/*/файлы/10 Сферы/*/Шкала»;
   • у луча есть раздел «## Помощники» (иначе предупреждение);
   • разделы карточки по шаблону; у `научность: популярное` в тексте пометка «слабо проверено».
 
@@ -77,6 +78,20 @@ def main():
     for sf in S.values():
         for k, r in sf["rays"].items():
             luchi[k] = (sf["folder"], r["file"], r["zones"])
+    # лучи модулей (п. 5.2): лежат в «80 Шаблоны/Модули/<модуль>/файлы/10 Сферы/<сфера>/Шкала/»,
+    # пока модуль не включён; включённый модуль уже найден выше в «10 Сферы»
+    for p in sorted((ROOT / "80 Шаблоны" / "Модули").glob("*/файлы/10 Сферы/*/Шкала/*.md")):
+        fm = read_fm(p.read_text(encoding="utf-8"))
+        k = fm.get("код")
+        if fm.get("тип") != "луч" or not k or k in luchi:
+            continue
+        imya = fm.get("луч") or p.stem.split("— ", 1)[-1]
+        zony = []
+        for it in spisok(fm.get("оценки")):
+            chast = it.rsplit(":", 1)[0].strip().split(" / ")[0].strip()
+            if chast != imya and chast not in zony:
+                zony.append(chast)
+        luchi[k] = (p.parent.parent.name, p.stem, zony)
     po_luchu = {}
     files = sorted(PAPKA.glob("Помощник — *.md")) if PAPKA.exists() else []
     for f in files:
