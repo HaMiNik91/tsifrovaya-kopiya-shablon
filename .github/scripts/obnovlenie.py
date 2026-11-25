@@ -22,6 +22,10 @@
   - Переименованный в шаблоне файл переносится под новое имя вместе с правками владельца,
     ссылки [[старое имя]] во всех файлах копии исправляются.
   - Файл, удалённый в шаблоне, удаляется, только если владелец его не менял.
+  - Сфера, которую владелец переименовал сам (экран «Мои сферы»), узнаётся по `код`: файлы шаблона
+    из «10 Сферы/NN Название шаблона/…» идут в папку владельца «10 Сферы/NN Своё название/…», а ссылки
+    и пути в тексте шаблона ([[NN Название шаблона]], file.hasLink("…"), «10 Сферы/…») получают его название.
+    Если владелец сферу не переименовывал, а шаблон переименовал — сфера переименовывается вслед за шаблоном.
   - Модули («80 Шаблоны/Модули/<имя>/файлы/…»): если модуль включён в копии («модули включены»
     в «00 Старт/Профиль.md»), правка файла модуля в шаблоне переносится и в рабочий файл копии
     по тому же пути без «80 Шаблоны/Модули/<имя>/файлы/» — по тем же правилам (свои оценки
@@ -69,6 +73,7 @@ ZHURNAL = "00 Старт/Обновления из шаблона.md"
 LICHNYE_PAPKI = ("01 Входящие/", "20 Журнал/", "40 Люди/", "70 Ветки/", "90 Архив/")  # «70 Ветки» — ветки владельца; оглавление папки — общее
 LICHNYE_PODPAPKI = ("Входящие", "Записи", "Опыт", "Путь", "Увлечения", "Деньги")  # внутри «10 Сферы/NN …/»
 LICHNYE_FAYLY = {"00 Старт/Как со мной работать.md", "00 Старт/Промт для нового чата.md", "00 Старт/Профиль.md",
+                 "00 Старт/Мои сферы.md",  # поручения и история экрана «Мои сферы»
                  "00 Старт/Следующий шаг.md",  # собирает sled_shag.py по оценкам владельца
                  ZHURNAL}
 # Общие файлы: правила, программы, страница, заготовки. Если владелец и шаблон изменили одно
@@ -84,7 +89,7 @@ NE_PERENOSIT = ("_работа/",)
 # Личные свойства шапки: всегда остаются как у владельца.
 LICHNYE = {
     "оценки", "оценено", "оценка", "слабый", "сильный", "статус", "обновлено", "скрыта", "скрыт",
-    "важность", "приоритет", "часы",
+    "важность", "приоритет", "часы", "порядок", "aliases",
     "замеры", "измерено", "расчёт", "пунктов", "здоров", "отмечено", "проверено", "беспокоит",
     "последнее", "следующее", "перепройти",
     "ступень", "проб", "радость", "компания", "люди", "темы", "настроение", "энергия",
@@ -462,6 +467,77 @@ def po_kodam(sh, ot, do, res):
     return [x for n, x in enumerate(res) if n not in lishnie]
 
 
+# ---------- свои названия сфер (экран «Мои сферы») ----------
+
+def papki_shablona(files):
+    """код → имена папок сфер в этой версии шаблона (по оглавлению «10 Сферы/NN X/NN X.md»)."""
+    out = {}
+    for p in files:
+        parts = p.split("/")
+        if len(parts) == 3 and parts[0] == "10 Сферы" and re.match(r"^\d\d ", parts[1]) and parts[2] == parts[1] + ".md":
+            out.setdefault(parts[1][:2], set()).add(parts[1])
+    return out
+
+
+def papki_kopii():
+    """код → имя папки сферы в копии (код — из оглавления, иначе номер папки)."""
+    out, d = {}, ROOT / "10 Сферы"
+    for x in sorted(d.iterdir()) if d.is_dir() else []:
+        if x.is_dir() and re.match(r"^\d\d ", x.name):
+            idx = x / f"{x.name}.md"
+            m = KOD.search(idx.read_text(encoding="utf-8").split("\n---\n", 1)[0]) if idx.is_file() else None
+            out[m.group(1) if m else x.name[:2]] = x.name
+    return out
+
+
+def svoi_sfery(files_base, files_theirs):
+    """Имя папки шаблона → имя папки владельца, для сфер, которые владелец назвал по-своему."""
+    b, th, mp = papki_shablona(files_base), papki_shablona(files_theirs), {}
+    for kod, own in papki_kopii().items():
+        if kod in b and own not in b[kod]:
+            for name in b[kod] | th.get(kod, set()):
+                if name != own:
+                    mp[name] = own
+    return mp
+
+
+def vsled_za_shablonom(files_base, files_theirs):
+    """Сферы, которые переименовал шаблон, а владелец оставил как было: имя папки владельца → новое имя."""
+    b, th, out = papki_shablona(files_base), papki_shablona(files_theirs), {}
+    for kod, own in papki_kopii().items():
+        if own in b.get(kod, set()) and own not in th.get(kod, set()) and len(th.get(kod, set())) == 1:
+            out[own] = next(iter(th[kod]))
+    return out
+
+
+def put_sfery(path, mp):
+    parts = path.split("/")
+    if len(parts) >= 2 and parts[0] == "10 Сферы" and parts[1] in mp:
+        new = mp[parts[1]]
+        if len(parts) == 3 and parts[2] == parts[1] + ".md":
+            parts[2] = new + ".md"
+        parts[1] = new
+    return "/".join(parts)
+
+
+def tekst_sfery(data, path, mp):
+    """Ссылки и пути на сферы шаблона → названия владельца (только .md, только точные имена)."""
+    if data is None or not mp or not path.endswith(".md"):
+        return data
+    t = text(data)
+    if t is None:
+        return data
+    for old, new in mp.items():
+        if old not in t:
+            continue
+        t = re.sub(r"\[\[" + re.escape(old) + r"(?=[\]|#])", lambda m: "[[" + new, t)
+        t = re.sub(r'(?<=")' + re.escape(old) + r'(?=")', lambda m: new, t)
+        for o, n in ((f"10 Сферы/{old}", f"10 Сферы/{new}"),
+                     (f"10 Сферы/{old}".replace(" ", "%20"), f"10 Сферы/{new}".replace(" ", "%20"))):
+            t = re.sub(re.escape(o) + r"""(?=[/"')\]]|$)""", lambda m: n, t, flags=re.M)
+    return t.encode("utf-8")
+
+
 def obnovit(a, sh, base, theirs, how, cfg, repo, vetka):
     T = sh.files(theirs)
     # Программы-расписания, которые прошлый запуск в GitHub Actions обновить не смог, считаются
@@ -494,6 +570,11 @@ def obnovit(a, sh, base, theirs, how, cfg, repo, vetka):
             else:
                 changes.append(("A", k_new, k_new, ot, new, new))
     bases = {b: sh.files(b) for b in {c[3] for c in changes}}
+    # сферы, названные владельцем по-своему: пути шаблона → его папки (по коду)
+    mp = svoi_sfery(sh.files(base), T)
+    if mp:
+        changes = [(st, put_sfery(o, mp), put_sfery(n, mp), ot, so, sn) for st, o, n, ot, so, sn in changes]
+        changes = [("M" if st == "R" and o == n else st, o, n, ot, so, sn) for st, o, n, ot, so, sn in changes]
 
     def local(p):
         f = ROOT / p
@@ -518,8 +599,8 @@ def obnovit(a, sh, base, theirs, how, cfg, repo, vetka):
             st = "A"
         if st == "R" and local(old) is None and local(new) is not None:
             st = "M"  # уже переименован раньше — слить в новый
-        tdata = sh.blob(T[s_new]) if s_new in T else None
-        bdata = sh.blob(B[s_old]) if s_old in B else None
+        tdata = tekst_sfery(sh.blob(T[s_new]) if s_new in T else None, s_new, mp)
+        bdata = tekst_sfery(sh.blob(B[s_old]) if s_old in B else None, s_old, mp)
         if st == "A":
             mine = local(new)
             if mine is None:
@@ -574,6 +655,17 @@ def obnovit(a, sh, base, theirs, how, cfg, repo, vetka):
             renames.append((old, new))
             log["переименовано"].append(f"{old} → {new}")
 
+    # сфера, переименованная шаблоном: личные файлы (Входящие, Опыт, Путь…) — тоже в новую папку
+    sled = vsled_za_shablonom(sh.files(base), T)
+    for own, new in sled.items():
+        for f in sorted((ROOT / "10 Сферы" / own).rglob("*")):
+            rel = f.relative_to(ROOT).as_posix()
+            if f.is_file() and rel not in deletes:
+                nrel = put_sfery(rel, sled)
+                if nrel not in writes:
+                    writes[nrel] = f.read_bytes()
+                deletes.append(rel)
+        notes.append(("ваши названия", f"10 Сферы/{new}", f"шаблон переименовал сферу «{own}» — ваши записи перенесены сюда"))
     # ссылки [[старое имя]] → [[новое имя]] во всех файлах копии
     links = {Path(o).stem: Path(n).stem for o, n in renames
              if o.endswith(".md") and Path(o).stem != Path(n).stem}
@@ -589,7 +681,17 @@ def obnovit(a, sh, base, theirs, how, cfg, repo, vetka):
                 writes[rel] = pat.sub(lambda m: "[[" + links[m.group(1)], t).encode("utf-8")
                 if rel not in sum(log.values(), []):
                     log["слито"].append(rel + " (ссылки)")
+    if sled:  # пути «10 Сферы/старое» и "старое" в таблицах Bases — тоже на новое имя
+        for rel in sorted(set(writes) | {f.relative_to(ROOT).as_posix() for f in ROOT.rglob("*.md")}):
+            if rel.startswith((".git/", "90 Архив/")) or rel in deletes or not rel.endswith(".md"):
+                continue
+            data = writes.get(rel) or (ROOT / rel).read_bytes()
+            new = tekst_sfery(data, rel, sled)
+            if new != data:
+                writes[rel] = new
 
+    for old, own in sorted(mp.items()):
+        notes.append(("ваши названия", f"10 Сферы/{own}", f"ваше название сферы шаблона «{old}» — обновления шаблона идут сюда"))
     report = otchet(base, theirs, how, log, notes, claude, repo, sh)
     print(report)
     if a.otchet:
@@ -646,8 +748,9 @@ def otchet(base, theirs, how, log, notes, claude, repo, sh):
         "новые оценки": "**Новые зоны** — оцените, когда будет удобно:",
         "взято из шаблона": "**Взято из шаблона** — общий файл, вы и шаблон изменили одно место; стоит версия шаблона, ваш прежний вариант — здесь (если это было ваше правило — его место в «Как со мной работать»):",
         "пропущено": "**Пропущено:**",
+        "ваши названия": "**Ваши названия сфер** — сфера узнана по коду, ничего делать не нужно:",
     }
-    for kind in ("снятые оценки", "оставлено ваше", "взято из шаблона", "новые оценки", "пропущено"):
+    for kind in ("снятые оценки", "оставлено ваше", "взято из шаблона", "новые оценки", "пропущено", "ваши названия"):
         if kind in groups:
             L += ["", titles[kind], *groups[kind]]
     if claude:
