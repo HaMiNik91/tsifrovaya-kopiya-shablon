@@ -15,6 +15,12 @@
     если модуль раньше выключали — файлы возвращаются из архива вместе с оценками). Модуль убран из списка —
     его файлы переносятся в «90 Архив/Модули/<имя>/», ничего не удаляется. Основа не выключается.
     Что включено сейчас, программа помнит в `модули включены`.
+  • анкета знакомства (страница, экран «Анкета» / «Обо мне») пишет `анкета пройдена` — дату и время. Если она
+    не совпадает с `анкета применена`, программа ОДИН раз применяет ответы: `пара: нет` — скрыть луч
+    «Совместная жизнь» (06.04), `пара: да` — открыть; `приоритеты` (коды сфер по порядку) — `приоритет` 1–3
+    в «NN Шкала» (у остальных сфер снимается; пустой список — ничего не трогать); `страна` — `валюта`
+    в «10 Деньги», если она ещё пустая и страна известна. Затем пишет `анкета применена`. Дальше владелец
+    меняет всё сам («Время и внимание», «Скрыть луч»), программа не повторяет, пока анкету не пройдут снова.
 Код выхода: 0 — всё хорошо (или нечего делать), 1 — ошибка (ничего не записано).
 """
 import argparse
@@ -30,6 +36,20 @@ MODULI = ROOT / "80 Шаблоны" / "Модули"
 ARHIV = ROOT / "90 Архив" / "Модули"
 SFERY = ROOT / "10 Сферы"
 OSNOVA = "Основа"
+DENGI = SFERY / "10 Финансы" / "Деньги" / "10 Деньги.md"
+PARA = "06.04"
+# Страна → основная валюта (код из трёх букв, как `валюта` в «10 Деньги»). Нет в списке — валюта не ставится.
+EVRO = ("испания", "германия", "франция", "италия", "португалия", "нидерланды", "бельгия", "австрия", "ирландия",
+        "финляндия", "греция", "словакия", "словения", "эстония", "латвия", "литва", "люксембург", "мальта",
+        "кипр", "хорватия", "черногория", "болгария")
+VALYUTY = {**{s: "EUR" for s in EVRO}, "россия": "RUB", "беларусь": "BYN", "белоруссия": "BYN", "украина": "UAH",
+           "казахстан": "KZT", "узбекистан": "UZS", "кыргызстан": "KGS", "киргизия": "KGS", "таджикистан": "TJS",
+           "армения": "AMD", "грузия": "GEL", "азербайджан": "AZN", "молдова": "MDL", "молдавия": "MDL",
+           "сша": "USD", "америка": "USD", "великобритания": "GBP", "англия": "GBP", "швейцария": "CHF",
+           "польша": "PLN", "чехия": "CZK", "сербия": "RSD", "турция": "TRY", "израиль": "ILS", "оаэ": "AED",
+           "таиланд": "THB", "тайланд": "THB", "индонезия": "IDR", "вьетнам": "VND", "китай": "CNY", "япония": "JPY",
+           "канада": "CAD", "австралия": "AUD", "мексика": "MXN", "аргентина": "ARS", "бразилия": "BRL",
+           "швеция": "SEK", "норвегия": "NOK", "дания": "DKK", "венгрия": "HUF", "румыния": "RON"}
 FM = re.compile(r"\A---\n(.*?\n)---\n", re.S)
 
 
@@ -53,7 +73,7 @@ def set_fm(text, key, value, after=None):
     """Поставить свойство в шапке: заменить строку (со списком) или вставить после `after` (иначе в конец)."""
     m = FM.match(text)
     lines = m.group(1).splitlines()
-    new = [f"{key}:"] + [f'  - "{x}"' for x in value] if isinstance(value, list) else [f"{key}: {value}"]
+    new = [f"{key}:"] + [f'  - "{x}"' for x in value] if isinstance(value, list) else [f"{key}: {value}" if value != "" else f"{key}:"]
     out, i, done = [], 0, False
     while i < len(lines):
         if lines[i].split(":", 1)[0] == key and not lines[i].startswith(" "):
@@ -148,6 +168,47 @@ def main():
         report.append(f"модуль «{m}» выключен — файлы в «90 Архив/Модули/{m}»")
     if nado != est:
         prof_text = set_fm(prof_text, "модули включены", nado, after="набор применён")
+
+    # 3. Анкета знакомства — один раз на каждое прохождение
+    proyd = prof.get("анкета пройдена") or ""
+    if isinstance(proyd, list):
+        proyd = proyd[0] if proyd else ""
+    if proyd and proyd != (prof.get("анкета применена") or ""):
+        para = (prof.get("пара") or "") if not isinstance(prof.get("пара"), list) else ""
+        if para in ("да", "нет"):
+            for p, tip, kod in shapki():
+                if tip == "луч" and kod == PARA:
+                    t = zapis.get(p) or p.read_text(encoding="utf-8")
+                    nado = "true" if para == "нет" else "false"
+                    if (read_fm(t).get("скрыт") or "false") != nado:
+                        zapis[p] = set_fm(t, "скрыт", nado, after="код")
+                        report.append(f"{'скрыт' if para == 'нет' else 'открыт'} луч «Совместная жизнь» (пара: {para})")
+        prio = spisok(prof.get("приоритеты"))[:3]
+        if prio:
+            for sc in sorted(SFERY.glob("*/[0-9][0-9] Шкала.md")):
+                t = zapis.get(sc) or sc.read_text(encoding="utf-8")
+                fm = read_fm(t)
+                if fm.get("тип") != "шкала":
+                    continue
+                kod = sc.parent.name[:2]
+                idx = sc.parent / f"{sc.parent.name}.md"
+                if idx.exists():
+                    kod = read_fm(idx.read_text(encoding="utf-8")).get("код") or kod
+                nado = str(prio.index(kod) + 1) if kod in prio else ""
+                cur = fm.get("приоритет") or ""
+                if (cur if not isinstance(cur, list) else "") != nado:
+                    zapis[sc] = set_fm(t, "приоритет", nado, after="важность")
+                    report.append(f"приоритет {nado or 'снят'}: {sc.relative_to(ROOT)}")
+        strana = (prof.get("страна") or "") if not isinstance(prof.get("страна"), list) else ""
+        val = VALYUTY.get(strana.strip().lower().replace("ё", "е"))
+        if val and DENGI.exists():
+            t = zapis.get(DENGI) or DENGI.read_text(encoding="utf-8")
+            cur = read_fm(t).get("валюта")
+            if not cur:
+                zapis[DENGI] = set_fm(t, "валюта", val, after="тип")
+                report.append(f"валюта {val} ({strana}): {DENGI.relative_to(ROOT)}")
+        prof_text = set_fm(prof_text, "анкета применена", f'"{proyd}"', after="анкета пройдена")
+        report.append("анкета применена")
 
     if errs:
         for e in errs:

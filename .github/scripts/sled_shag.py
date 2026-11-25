@@ -17,6 +17,8 @@
       — «Взять в Путь»: создать шаг `NN Шаг — Название.md` в папке «Путь» сферы помощника
       (луч, уровень, ссылка на помощника, первая практика; `статус: в работе`). Если шаг с этим
       помощником уже есть — ничего не создаёт и называет его. Задачу в Todoist ставит Claude.
+Из «00 Старт/Профиль.md» (анкета знакомства): `событие` — подсказка завести ветку («70 Ветки»), пока живой ветки
+нет; `ограничения здоровья: да` — у физических лучей (FIZ, как на странице) строка «Сначала посоветуйтесь с врачом».
 Ошибки — ✖, предупреждения — ⚠.
 """
 import argparse
@@ -33,6 +35,10 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 SFERY = ROOT / "10 Сферы"
 POMOSH = ROOT / "60 Помощники"
 PAGE = ROOT / "00 Старт" / "Следующий шаг.md"
+PROFIL = ROOT / "00 Старт" / "Профиль.md"
+VETKI = ROOT / "70 Ветки"
+FIZ = ("01.01", "01.03", "01.06", "01.08", "01.09", "01.10")  # физические лучи — тот же список в docs/index.html
+VRACH = "*Сначала посоветуйтесь с врачом: в «Профиле» отмечены ограничения по здоровью для нагрузок.*"
 START, END = "<!-- sled_shag: начало -->", "<!-- sled_shag: конец -->"
 STEP = re.compile(r"^\*\*Шаг вверх \((\d+) → (\d+)\):\*\*\s*(.+)")
 NUM = re.compile(r":\s*(\d+)\s*$")
@@ -155,9 +161,34 @@ def targets(luch, helpers):
     return out
 
 
+def profil():
+    if not PROFIL.exists():
+        return {}
+    fm = read_fm(PROFIL.read_text(encoding="utf-8"))
+    return {k: (v if isinstance(v, str) else "").strip() for k, v in fm.items()}
+
+
+def sobytie(prof):
+    """Подсказка ветки по `событие` — пока в «70 Ветки» нет живой ветки."""
+    sob = prof.get("событие", "")
+    if not sob or sob.lower() == "нет":
+        return []
+    if VETKI.exists() and any(re.match(r"\d{4}-\d\d-\d\d Ветка — ", p.name) for p in VETKI.glob("*.md")):
+        return []
+    vid = {"переезд": "Переезд", "новый питомец": "Новый питомец", "ребёнок": "Беременность", "ребенок": "Беременность"}.get(sob.lower())
+    if vid:
+        return [f"**Впереди: {sob}.** Для этого есть заготовка [[Ветка — {vid}]]: подготовка, сам день и привыкание — "
+                f"со сроками от даты события. Завести — сказать Claude «заводим ветку «{vid}»» и дату.", ""]
+    return [f"**Впереди: {sob}.** Для большого события можно завести ветку из заготовок «80 Шаблоны/Ветки» или свою — "
+            "сказать Claude «заводим ветку» и дату.", ""]
+
+
 def build(spheres, helpers):
     today = datetime.date.today().isoformat()
     L = [START, f"*Собрано программой `sled_shag.py` {today} — руками не править. Взять шаг в «Путь» — сказать Claude «беру помощника …».*", ""]
+    prof = profil()
+    L += sobytie(prof)
+    vrach = prof.get("ограничения здоровья") == "да"
     prio = sorted([s for s in spheres if s["prio"]], key=lambda s: s["prio"])
     if not prio:
         L += ["Сферы-приоритеты не выбраны — их ставят в [[Время и внимание]] (важность, место, часы).", ""]
@@ -171,6 +202,8 @@ def build(spheres, helpers):
             L.append("")
             L.append(f"Луч: [[{luch['file']}]]")
             L.append("")
+            if vrach and luch["kod"] in FIZ:
+                L += [VRACH, ""]
             tg = targets(luch, helpers)
             shown = 0
             for e in tg:

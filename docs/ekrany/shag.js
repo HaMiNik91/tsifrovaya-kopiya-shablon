@@ -73,6 +73,7 @@
     let h = `<nav class="crumbs"><a href="#/">Колесо</a><span>›</span><span>Следующий шаг</span></nav>`;
     h += head(null, 'Следующий шаг', 'У сфер-приоритетов — самый слабый луч, его шаг вверх и помощники ровно под ваш уровень', null, 'шаг', '');
     if (S.mode !== 'live') h += `<div class="note">Демо: «Взять в Путь» здесь не сохраняется.</div>`;
+    h += sobytie();
     const prio = S.spheres.filter(s => s.prio).sort((a, b) => a.prio - b.prio);
     if (!prio.length) h += `<div class="step"><b class="t">Сферы-приоритеты не выбраны</b><p class="desc" style="color:inherit">Выберите до трёх сфер, которые двигать первыми, — тогда здесь появится их самый слабый луч и что с ним делать.</p><div class="pick"><a class="btn main" href="#/vremya">Время и внимание</a></div></div>`;
     for (const sp of prio){
@@ -81,7 +82,7 @@
       const low = Math.min(...vis.map(r => r.score));
       for (const ray of vis.filter(r => r.score === low)){
         const ri = sp.rays.indexOf(ray);
-        h += `<h2>${sp.prio}. ${esc(sp.name)} — луч «<a href="#/${sp.nn}/${ri}">${esc(ray.name)}</a>», ${ray.score} из 10${ray.approx ? ' (примерно)' : ''}</h2>`;
+        h += `<h2>${sp.prio}. ${esc(sp.name)} — луч «<a href="#/${sp.nn}/${ri}">${esc(ray.name)}</a>», ${ray.score} из 10${ray.approx ? ' (примерно)' : ''}</h2>` + vrach(ray);
         const tg = targets(ray, H); let shown = 0;
         for (const e of tg){
           if (shown >= 2 || (shown && !e.helpers.length)) break;
@@ -114,6 +115,17 @@
       h += `<h2>Остальные сферы</h2><div class="rows">` + rest.map(({sp, ray, n}) => `<a class="row" href="#/${sp.nn}/${sp.rays.indexOf(ray)}"><span class="name">${esc(sp.nn)} ${esc(ray.name)}<em>${n ? `помощников: ${n}` : 'помощника под уровень пока нет'}</em></span><span class="bar"><i style="width:${ray.score * 10}%"></i></span><span class="num">${ray.score}</span><span class="arrow">›</span></a>`).join('') + `</div>`;
     } else if (!prio.length) h += `<p class="desc">Оценок ещё нет — начните с <a href="#/opros">опросника</a> или Шкалы, тогда здесь появится самый слабый луч каждой сферы.</p>`;
     return h + `<p class="legend">Помощник подбирается под ваш уровень: советы для верхних ступеней не показываются. «Взять в Путь» создаёт шаг в папке «Путь» сферы; задачу в менеджере задач поставит Claude, если попросите.</p>`;
+  }
+
+  // Большое событие из «Профиля» (анкета) → подсказка ветки, как в sled_shag.py
+  function sobytie(){
+    const sob = String(readFm(view(PROFIL) || '')['событие'] || '').trim(), v = vetka(sob);
+    if (!v) return '';
+    const vid = v === 'своя' ? '' : v, est = S.paths.some(p => /^70 Ветки\/\d{4}-\d\d-\d\d Ветка — .+\.md$/.test(p)); // ветка уже заведена — подсказка не нужна
+    if (est) return '';
+    return `<div class="step"><b class="t">Впереди: ${esc(sob)}</b><p class="desc" style="color:inherit">${vid
+      ? `Для этого есть готовая ветка «${esc(vid)}»: подготовка, сам день и привыкание — со сроками от даты события.`
+      : 'Для большого события можно завести ветку: подготовка, сам день и привыкание — по одной из заготовок «70 Ветки» или своя.'} Чтобы завести её, скажите Claude: «заводим ветку${vid ? ' «' + esc(vid) + '»' : ''}» и дату события.</p></div>`;
   }
 
   // «Взять в Путь» — как sled_shag.py --vzyat

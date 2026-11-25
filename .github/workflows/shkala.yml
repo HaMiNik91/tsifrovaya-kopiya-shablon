@@ -6,15 +6,17 @@
 # nedelya.py — «Итоги» планов недели в «20 Журнал» (CLAUDE.md, п. 9.6): часы по сферам, план против сделанного.
 # vetki.py — ветки событий в «70 Ветки» (CLAUDE.md, п. 5.6): сроки шагов, фаза, раздел «Сейчас»;
 # раз в день (расписание) пересчёт идёт и без коммита — сроки и обследования зависят от сегодняшней даты.
+# Первым — nastroyka.py (CLAUDE.md, п. 5.2, «Профиль»): после правки «Профиля» (анкета знакомства на странице, «Обо мне»)
+# раскладывает модули, применяет набор и ответы анкеты — затем пересчёт видит уже настроенную копию.
 # В запросе на слияние (Pull Request) только проверяет форму. Красная проверка — ошибка формы оценок, список в журнале.
 name: Пересчёт оценок Шкалы и Медкарты
 
 on:
   push:
     branches: [main]
-    paths: ["10 Сферы/**", "00 Старт/Колесо баланса.md", ".github/scripts/shkala.py", ".github/scripts/instrumenty.py", ".github/scripts/dengi.py", "60 Помощники/**", ".github/scripts/sled_shag.py", "20 Журнал/**", ".github/scripts/nedelya.py", "70 Ветки/**", "80 Шаблоны/Ветки/**", ".github/scripts/vetki.py", ".github/scripts/tsikl.py"]
+    paths: ["10 Сферы/**", "00 Старт/Колесо баланса.md", "00 Старт/Профиль.md", ".github/scripts/nastroyka.py", ".github/scripts/shkala.py", ".github/scripts/instrumenty.py", ".github/scripts/dengi.py", "60 Помощники/**", ".github/scripts/sled_shag.py", "20 Журнал/**", ".github/scripts/nedelya.py", "70 Ветки/**", "80 Шаблоны/Ветки/**", ".github/scripts/vetki.py", ".github/scripts/tsikl.py"]
   pull_request:
-    paths: ["10 Сферы/**", "00 Старт/Колесо баланса.md", ".github/scripts/shkala.py", ".github/scripts/instrumenty.py", ".github/scripts/dengi.py", "60 Помощники/**", ".github/scripts/sled_shag.py", "20 Журнал/**", ".github/scripts/nedelya.py", "70 Ветки/**", "80 Шаблоны/Ветки/**", ".github/scripts/vetki.py", ".github/scripts/tsikl.py"]
+    paths: ["10 Сферы/**", "00 Старт/Колесо баланса.md", "00 Старт/Профиль.md", ".github/scripts/nastroyka.py", ".github/scripts/shkala.py", ".github/scripts/instrumenty.py", ".github/scripts/dengi.py", "60 Помощники/**", ".github/scripts/sled_shag.py", "20 Журнал/**", ".github/scripts/nedelya.py", "70 Ветки/**", "80 Шаблоны/Ветки/**", ".github/scripts/vetki.py", ".github/scripts/tsikl.py"]
   schedule:
     - cron: "17 4 * * *"
   workflow_dispatch:
@@ -40,6 +42,7 @@ jobs:
       - name: Проверка формы (запрос на слияние)
         if: github.event_name == 'pull_request'
         run: |
+          python3 .github/scripts/nastroyka.py --proverit
           python3 .github/scripts/shkala.py
           python3 .github/scripts/medkarta.py
           python3 .github/scripts/instrumenty.py
@@ -49,6 +52,8 @@ jobs:
       - name: Пересчитать и записать оценки
         if: github.event_name != 'pull_request'
         run: |
+          # в общем шаблоне профиль пустой и личного нет — настраиваются только копии
+          if [ "${{ github.repository }}" != "HaMiNik91/tsifrovaya-kopiya-shablon" ]; then python3 .github/scripts/nastroyka.py; fi
           python3 .github/scripts/shkala.py --write
           python3 .github/scripts/medkarta.py --write
           python3 .github/scripts/instrumenty.py --write
@@ -60,6 +65,6 @@ jobs:
           if [ -n "$(git status --porcelain)" ]; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add -A && git commit -m "Пересчёт оценок Шкалы, Медкарты, Инструментов, Денег, Следующего шага, Плана недели, Веток и Цикла (shkala.py, medkarta.py, instrumenty.py, dengi.py, sled_shag.py, nedelya.py, vetki.py, tsikl.py)"
+            git add -A && git commit -m "Настройка по профилю и пересчёт оценок Шкалы, Медкарты, Инструментов, Денег, Следующего шага, Плана недели, Веток и Цикла (nastroyka.py, shkala.py, medkarta.py, instrumenty.py, dengi.py, sled_shag.py, nedelya.py, vetki.py, tsikl.py)"
             for i in 1 2 3; do git pull --rebase -q && git push && break; sleep 5; done
           fi
