@@ -166,6 +166,7 @@ code{font-family:var(--mono);font-size:13px}
 
 <!-- Экраны: каждый — свой файл в docs/ekrany (window.EKRANY); грузятся до основного скрипта -->
 <!--EKRANY--><script src="ekrany/obshchee.js"></script>
+<script src="ekrany/anketa.js"></script>
 <script src="ekrany/opros.js"></script>
 <script src="ekrany/shag.js"></script>
 <script src="ekrany/nedelya.js"></script>
@@ -184,6 +185,7 @@ const CFG = {
 const OAUTH = (CFG.oauth || (location.origin + '/vhod')).replace(/\/+$/, '');
 const API = 'https://api.github.com';
 const SPH_DIR = '10 Сферы';
+const PROFIL = '00 Старт/Профиль.md'; // анкета знакомства и «Обо мне» (docs/ekrany/anketa.js)
 
 // ───────── Хранилище браузера (только удобство: ключ и имя хранилища на этом устройстве) ─────────
 const LS = {
@@ -548,7 +550,7 @@ function b64dec(b64){ const s = atob(b64.replace(/\s/g, '')); const b = new Uint
 async function pool(items, n, fn){ let i = 0; await Promise.all(Array.from({length: Math.min(n, items.length)}, async () => { while (i < items.length) await fn(items[i++]); })); }
 const norm = t => t.replace(/\r\n/g, '\n');
 const isIdx = p => { const m = p.match(/^10 Сферы\/(\d\d [^/]+)\/([^/]+)\.md$/); return !!m && m[1] === m[2]; };
-const wanted = p => /^10 Сферы\/\d\d [^/]+\/(Шкала\/[^/]+\.md|\d\d Шкала\.md)$/.test(p) || isIdx(p) || p === '80 Шаблоны/Шаблон — Шаг.md';
+const wanted = p => /^10 Сферы\/\d\d [^/]+\/(Шкала\/[^/]+\.md|\d\d Шкала\.md)$/.test(p) || isIdx(p) || p === '80 Шаблоны/Шаблон — Шаг.md' || p === PROFIL;
 // Догрузка файлов для экранов (помощники, опросник, недели, деньги…): только то, чего ещё нет
 async function nuzhny(pred){
   const need = S.paths.filter(p => pred(p) && !S.files.has(p));
@@ -814,14 +816,18 @@ function wheelView(){
   const w = wheelScore();
   const items = S.spheres.map(s => ({name: `${s.nn} ${s.name}`, label: s.name, score: s.score, href: `#/${s.nn}`, extra: extra(s.rated, s.rays.length, 'лучей', s.score)}));
   let h = (S.mode !== 'live' ? `<div class="note">Демо: так выглядит пустой шаблон. Оценки и правки здесь не сохраняются. Чтобы заполнять своё, <a href="#/vhod">войдите в своё хранилище</a>.</div>` : '');
+  const imya = String(readFm(view(PROFIL) || '')['имя'] || '').trim();
+  if (imya && S.mode === 'live') h += `<div class="sub">Здравствуйте, ${esc(imya)}!</div>`;
   h += head(w.score, 'Колесо сфер', `Среднее по ${w.rated} сферам из ${S.spheres.length}`, items, 'жизнь', w.calc);
   const op = EK.opros && EK.opros.menu, opFirst = !!(op && S.spheres.some(s => s.rays.some(r => r.score == null))); // пока есть лучи без оценки — опросник первым
   const card = (k, e, cls) => `<a class="card tw${cls}" href="#/${k}"><b>${esc(e.menu.title)}</b><span>${esc(typeof e.menu.sub === 'function' ? e.menu.sub() : e.menu.sub)}</span><span class="arrow">›</span></a>`;
+  const anFirst = !!(EK.anketa && view(PROFIL) != null && !EK.anketa.passed());
+  if (anFirst) h += card('anketa', EK.anketa, ' first');
   if (opFirst) h += card('opros', EK.opros, ' first');
   h += radar(items) + rows(items);
   const tw = S.spheres.filter(s => s.prio != null).sort((a, b) => a.prio - b.prio);
   h += `<a class="card tw" href="#/vremya"><b>Время и внимание</b><span>${tw.length ? 'Приоритеты: ' + tw.map(s => `${s.prio} — ${esc(s.name)}`).join(', ') : 'Какие сферы двигать первыми и сколько часов в неделю на каждую'}</span><span class="arrow">›</span></a>`;
-  h += Object.entries(EK).filter(([k, e]) => e.menu && !(opFirst && k === 'opros')).sort((a, b) => a[1].menu.order - b[1].menu.order)
+  h += Object.entries(EK).filter(([k, e]) => e.menu && !(opFirst && k === 'opros') && !(anFirst && k === 'anketa')).sort((a, b) => a[1].menu.order - b[1].menu.order)
     .map(([k, e]) => card(k, e, '')).join('');
   if (S.hidden.length) h += hiddenBlock('Скрытые сферы', S.hidden.map(s => ({name: `${s.nn} ${s.name}`, act: 'unhideSphere', id: s.dir})));
   return h + `<p class="legend">Нажмите на сферу: откроются её лучи. Оценку ставите только внизу — на линейке уровней; всё выше страница считает сама: среднее, ,5 и меньше — вниз, больше ,5 — вверх.</p>`;
@@ -850,11 +856,16 @@ function rayTools(ray){
   if (ray.approx) h += `<div class="note">Оценка «примерно» — из опросника. Пройдите линейку${ray.zones.length ? ' каждой зоны' : ''} и поставьте свою цифру${ray.zones.length ? ', затем снимите пометку' : ''}.${ray.zones.length ? `<div class="pick" style="margin-top:8px"><button class="btn" data-act="exactRay" data-id="${esc(ray.path)}">Проверил по линейке — снять «примерно»</button></div>` : ''}</div>`;
   return h;
 }
+// «Ограничения здоровья: да» в «Профиле» — у физических лучей напоминание (как в sled_shag.py: FIZ)
+const FIZ = ['01.01', '01.03', '01.06', '01.08', '01.09', '01.10'];
+const vrach = ray => FIZ.includes(ray.kod) && String(readFm(view(PROFIL) || '')['ограничения здоровья'] || '').trim() === 'да'
+  ? `<div class="note">Сначала посоветуйтесь с врачом: вы отметили ограничения по здоровью для нагрузок. Линейка и помощники — общие, нагрузку подберите с врачом.</div>` : '';
 function rayView(sp, ray, ri){
   let h = crumbs(sp, ray, ri);
   const zi = ray.zones.map((z, i) => ({name: z.name, score: z.score, href: `#/${sp.nn}/${ri}/${i}`, extra: z.signs.length ? extra(z.signs.filter(s => s.score != null).length, z.signs.length, 'признаков', z.score) : (z.score == null ? 'не оценено' : '')}));
   h += head(ray.score, ray.name, ray.zones.length ? `Зон: ${ray.zones.length}` : 'Одна линейка, без зон', ray.zones.length ? zi : null, 'луч', ray.calc);
   if (ray.desc) h += `<p class="desc">${md(ray.desc).replace(/<\/?p>/g, '')}</p>`;
+  h += vrach(ray);
   for (const p of ray.problems) h += `<div class="note err">В файле луча: ${esc(p)}</div>`;
   h += rayTools(ray);
   const hide = `<div class="pick"><button class="btn" data-act="hideRay" data-id="${esc(ray.path)}">Скрыть луч — не моё</button></div>`;
@@ -863,7 +874,7 @@ function rayView(sp, ray, ri){
   return h + (o.lad ? ladder(o) : `<div class="note">Линейки уровней в файле пока нет.</div>`) + proseBlock(o.prose) + hide;
 }
 function zoneView(sp, ray, ri, zone){
-  let h = crumbs(sp, ray, ri, zone) + head(zone.score, zone.name, `Зона луча «${esc(ray.name)}»`, zone.signs.length > 1 ? zone.signs : null, 'зона', zone.calc);
+  let h = crumbs(sp, ray, ri, zone) + head(zone.score, zone.name, `Зона луча «${esc(ray.name)}»`, zone.signs.length > 1 ? zone.signs : null, 'зона', zone.calc) + vrach(ray);
   const list = zone.signs.length ? zone.signs.map(s => ladderSpec(sp, ray, zone, s)) : [ladderSpec(sp, ray, zone, null)];
   const seen = new Set();
   for (const o of list){
@@ -1073,6 +1084,10 @@ async function start(mode){
     S.mode = mode; for (const k in EK) EK[k].loaded = false; build(); status();
     for (const k in EK) if (EK[k].fon) EK[k].fon(); // фоновая подготовка экранов (например, «вышла новая версия»)
     if (route()[0] === 'vhod' && mode !== 'live') location.hash = '#/';
+    if (mode === 'live' && !route()[0] && EK.anketa && view(PROFIL) != null && !EK.anketa.passed()){
+      const k = `an.${S.owner}/${S.repo}.auto`; // анкета ещё не пройдена: сначала она (один раз на хранилище и устройство)
+      if (!LS.get(k)){ LS.set(k, '1'); history.replaceState(null, '', location.pathname + location.search + '#/anketa'); }
+    }
     if (mode === 'live' && !route()[0] && EK.opros && S.spheres.length && [...S.spheres, ...S.hidden].every(x => x.rays.every(r => r.score == null))){
       const k = `op.${S.owner}/${S.repo}.auto`; // новый человек без единой оценки: сначала опросник (один раз на хранилище)
       if (!LS.get(k)){ LS.set(k, '1'); history.replaceState(null, '', location.pathname + location.search + '#/opros'); }

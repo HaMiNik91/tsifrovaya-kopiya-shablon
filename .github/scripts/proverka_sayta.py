@@ -125,7 +125,7 @@ def server():
 class Sayt:
     """Страница, открытая владельцем (вход по ключу) на подменённом GitHub."""
 
-    def __init__(self, ctx, port, nachalo=None, vhod=True, worker=None):
+    def __init__(self, ctx, port, nachalo=None, vhod=True, worker=None, anketa=False):
         self.gh = Gh(nachalo)
         self.page = ctx.new_page()
         self.errors = []
@@ -144,6 +144,8 @@ class Sayt:
         if vhod:
             self.page.add_init_script(f"""try{{localStorage.setItem('tk.repo','{OWNER}/{REPO}');
                 localStorage.setItem('tk.token','proba');localStorage.setItem('tk.via','key');}}catch(e){{}}""")
+            if not anketa:  # анкету уже предлагали — другие проверки начинают с колеса или опросника
+                self.page.add_init_script(f"try{{localStorage.setItem('an.{OWNER}/{REPO}.auto','1')}}catch(e){{}}")
         self.base = f"http://127.0.0.1:{port}/index.html"
 
     def _vhod(self, route, request):
@@ -377,6 +379,133 @@ def t_opros(ctx, port, snimki):
     s.programmy("shkala.py", "oprosnik.py", "sled_shag.py")
     assert not s.errors, s.errors
     s.snimok(snimki, "opros-priznak")
+
+
+PROFIL = "00 Старт/Профиль.md"
+
+
+def nastroyka_v_gh(gh):
+    """Как GitHub Actions после коммита «Профиля»: nastroyka.py в пробной копии, изменения — в подменённый GitHub."""
+    import shutil
+    d = kopiya({PROFIL: gh.files[PROFIL]})
+    r = subprocess.run([sys.executable, str(d / ".github/scripts/nastroyka.py")], cwd=d, capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout + r.stderr
+    for f in d.rglob("*.md"):
+        rel = str(f.relative_to(d))
+        if rel.startswith(".git"):
+            continue
+        text = f.read_text(encoding="utf-8")
+        if gh.files.get(rel) != text and (rel in gh.files or not rel.startswith("80 Шаблоны/")):
+            gh.files[rel] = text
+    shutil.rmtree(d.parent)
+    return r.stdout
+
+
+def t_anketa(ctx, port, snimki):
+    """Анкета при первом входе: ответы → «Профиль» одним коммитом → nastroyka.py → опросник с вопросами модуля; «Обо мне»."""
+    s = Sayt(ctx, port, anketa=True).open()
+    s.ждать_текст("Давайте познакомимся")
+    assert "#/anketa" in s.page.url, s.page.url
+    s.snimok(snimki, "anketa-start")
+    s.click("Начать")
+    s.page.fill("[data-an='imya']", "Анна")
+    s.click("Дальше")
+    s.ждать_текст("Ваш год рождения")
+    s.page.fill("[data-an='god']", "1990")
+    s.click("Дальше")
+    s.click("Женский")
+    s.ждать_текст("Хотите отмечать месячный цикл")
+    s.click("Да")
+    s.page.fill("[data-an='strana']", "Германия")
+    s.click("Дальше")
+    s.ждать_текст("Есть ли у вас сейчас пара")
+    s.click("Нет")
+    s.ждать_текст("Есть ли у вас дети")
+    s.click("Нет")
+    s.ждать_текст("домашние животные")
+    s.click("Есть")
+    s.ждать_текст("ограничения по здоровью")
+    s.click("Есть")
+    s.ждать_текст("Чем вы сейчас живёте")
+    s.click("Работа")
+    s.ждать_текст("Сколько часов в неделю")
+    s.click("3 ч")
+    s.ждать_текст("большое событие")
+    s.click("Переезд")
+    s.ждать_текст("С чего начать")
+    s.click("6 главных сфер, остальные потом")
+    s.ждать_текст("важнее всего")
+    names = s.page.locator("[data-act='anketa:prio']").all_inner_texts()
+    assert len(names) == 6 and not any("Духовность" in x for x in names), names  # «Лёгкий старт» — 6 сфер
+    s.click("[data-act='anketa:prio'][data-v='10']")
+    s.click("[data-act='anketa:prio'][data-v='01']")
+    s.snimok(snimki, "anketa-prio")
+    s.click("Дальше")
+    s.ждать_текст("вот что мы настроим")
+    txt = s.text()
+    for need in ("включится модуль «питомцы»", "включится модуль «цикл»", "скроются сферы", "скроется луч «совместная жизнь»",
+                 "в приоритете: 1 — финансы, 2 — здоровье и молодость", "германия", "посоветуйтесь с врачом", "ветку «переезд»"):
+        assert need in txt, (need, txt[:900])
+    s.snimok(snimki, "anketa-itog")
+    s.click("Всё верно")
+    s.ждать_записи(1)
+    assert len(s.gh.commits) == 1 and s.gh.commits[0][0] == PROFIL, s.gh.commits
+    pr = s.gh.files[PROFIL]
+    for k, v in (("имя", "Анна"), ("год рождения", "1990"), ("пол", "женский"), ("страна", "Германия"), ("пара", "нет"), ("дети", "нет"),
+                 ("ограничения здоровья", "да"), ("этап жизни", "работа"), ("часов в неделю", "3"), ("событие", "переезд"), ("набор", "Лёгкий старт")):
+        assert fm_get(pr, k) == v, (k, fm_get(pr, k))
+    assert fm_get(pr, "приоритеты") == ["10", "01"] and fm_get(pr, "модули") == ["Основа", "Питомцы", "Цикл"], (fm_get(pr, "приоритеты"), fm_get(pr, "модули"))
+    assert fm_get(pr, "анкета пройдена"), "нет «анкета пройдена»"
+    s.ждать_текст("Настраиваю копию")
+    out = nastroyka_v_gh(s.gh)   # «GitHub Actions»
+    for need in ("модуль «Питомцы» включён", "модуль «Цикл» включён", "скрыт луч «Совместная жизнь»", "приоритет 1", "валюта EUR", "анкета применена"):
+        assert need in out, (need, out)
+    s.ждать(lambda: "#/opros" in s.page.url and "Начать" in s.page.inner_text("#app"), 30000, "переход к опроснику")
+    s.click("Начать")
+    s.ждать_текст("Как в целом обстоят дела со здоровьем")   # пара и дети уже в «Профиле» — опросник их не спрашивает
+    for _ in range(12):
+        if "модуль ·" in s.text():
+            break
+        s.click("Пропустить")
+    assert "модуль · луч «цикл»" in s.text() and "знаю свой цикл" in s.text(), s.text()[:300]
+    s.snimok(snimki, "anketa-modul")
+    s.click("[data-act='opros:bucket'][data-v='hor']")
+    s.click("[data-act='opros:lvl'][data-v='8']")
+    s.ждать_записи()
+    cikl = next(p for p, t in s.gh.files.items() if fm_get(t, "код") == "01.13" and p.startswith("10 Сферы/"))
+    assert "Знаю свой цикл: 8" in fm_get(s.gh.files[cikl], "оценки"), fm_get(s.gh.files[cikl], "оценки")
+    # колесо здоровается; у физического луча — напоминание; «Следующий шаг» подсказывает ветку
+    s.go("#/")
+    s.ждать_текст("Здравствуйте, Анна")
+    assert "обо мне" in s.text()
+    sila = next(p for p, t in s.gh.files.items() if fm_get(t, "код") == "01.06")
+    s.go("#/01")
+    i = next(k for k, x in enumerate(s.page.locator(".rows .row .name").all_inner_texts()) if x.startswith(fm_get(s.gh.files[sila], "луч")))
+    s.go(f"#/01/{i}")
+    s.ждать_текст("Сначала посоветуйтесь с врачом")
+    s.go("#/shag")
+    s.ждать_текст("Впереди: переезд")
+    # «Обо мне»: прежние ответы на месте, повторный проход не трогает модули
+    s.go("#/anketa")
+    s.ждать_текст("Обо мне")
+    s.click("Пройти")
+    assert s.page.input_value("[data-an='imya']") == "Анна"
+    n = len(s.gh.commits)
+    for _ in range(20):
+        if "вот что мы настроим" in s.text():
+            break
+        if s.page.locator("[data-act='anketa:txt']").count():
+            s.click("[data-act='anketa:txt']")
+        else:
+            s.click("Пропустить") if s.page.get_by_text("Пропустить", exact=True).count() else s.click("Дальше")
+    txt = s.text()
+    assert "включится модуль" not in txt and "выключится" not in txt and "скроются сферы" not in txt, txt[:600]
+    s.click("Всё верно")
+    s.ждать_записи(n + 1)
+    pr2 = s.gh.files[PROFIL]
+    assert fm_get(pr2, "модули") == ["Основа", "Питомцы", "Цикл"] and fm_get(pr2, "имя") == "Анна" and fm_get(pr2, "приоритеты") == ["10", "01"]
+    s.programmy("nastroyka.py", "shkala.py", "sled_shag.py")
+    assert not s.errors, s.errors
 
 
 def t_shablon(ctx, port, snimki):

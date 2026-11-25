@@ -7,6 +7,11 @@
 //   без детей не трогается зона «Свои дети» (07.01) — у неё остаётся `нет`. Ответ «нет» включает запасные
 //   варианты вопросов сферы (`вопрос без пары`, `ступени без пары`, `уточнить без пары`; так же «без детей»), если они есть.
 // У уточнения свои три ответа: «КОД / Зона — вопрос || хорошо | средне | плохо»; кнопки — от хорошего к плохому.
+// Пара и дети — из «Профиля» (анкета знакомства, docs/ekrany/anketa.js): если там уже есть ответ, опросник его
+//   не спрашивает; если нет — спрашивает и записывает ответ в «Профиль».
+// Вопросы модулей: у включённого модуля («Питомцы», «Цикл») луч лежит в копии по тому же пути, что в
+//   «80 Шаблоны/Модули/<имя>/файлы/…». После уточнений своей сферы — по шагу на каждую зону такого луча:
+//   вопрос луча (`вопрос`) и пояснение зоны из заголовка → «хорошо / средне / скорее плохо» → кусок линейки зоны.
 'use strict';
 (window.EKRANY = window.EKRANY || {}).opros = (() => {
   const DIR = '80 Шаблоны/Опросник/';
@@ -16,8 +21,16 @@
   const key = () => `op.${S.owner || 'demo'}/${S.repo || ''}`;
   const pos = () => { if (st.i == null){ const v = parseInt(LS.get(key() + '.i'), 10); st.i = isFinite(v) ? v : 0; } return st.i; };
   const go = i => { st.i = i; st.bucket = null; LS.set(key() + '.i', String(i)); render(); scrollTo(0, 0); };
-  const noKids = () => LS.get(key() + '.deti') === 'нет';
-  const noPair = () => LS.get(key() + '.para') === 'нет';
+  const prof = k => String(readFm(view(PROFIL) || '')[k] || '').trim();
+  const noKids = () => (prof('дети') || LS.get(key() + '.deti')) === 'нет';
+  const noPair = () => (prof('пара') || LS.get(key() + '.para')) === 'нет';
+  const MOD = '80 Шаблоны/Модули/';
+  const isMod = r => S.paths.some(p => p.startsWith(MOD) && p.endsWith('/файлы/' + r.path)); // луч пришёл из модуля
+  const zoneHint = (r, z) => { const m = (view(r.path) || '').match(new RegExp(`^## (?:\\d+\\.? )?Зона «${z.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}»\\s*—\\s*(.+)$`, 'm')); return m ? m[1].trim() : ''; };
+  function profSet(k, v){ // ответ опросника — и в «Профиль», чтобы анкета и опросник не расходились
+    if (S.mode !== 'live' || view(PROFIL) == null) return;
+    change(PROFIL, {type: 'fm', sets: [[k, v, k === 'пара' ? 'страна' : 'пара']], date: today()}, `Опросник: ${k} — ${v} (в «Профиль»)`);
+  }
 
   const lines = v => Array.isArray(v) ? v : (v ? [v] : []);
   const rayBy = kod => { for (const sp of S.spheres) for (const r of sp.rays) if (r.kod === kod) return {sp, r}; return null; };
@@ -33,7 +46,10 @@
     return {q: v('вопрос') || '', stup, ut};
   }
   function steps(){ // весь путь: начало, пара, дети, по сфере — общий вопрос и уточнения (у зоны с признаками — по признаку), конец
-    const out = [{k: 'intro'}, {k: 'para'}, {k: 'deti'}];
+    const out = [{k: 'intro'}];
+    // спрошенное здесь остаётся шагом (ответ уже ушёл в «Профиль», а номер шага не должен съехать)
+    if (!prof('пара') || LS.get(key() + '.para')) out.push({k: 'para'});
+    if (!prof('дети') || LS.get(key() + '.deti')) out.push({k: 'deti'});
     for (const sp of S.spheres){
       const o = opros(sp); if (!o || !o.stup.length) continue;
       out.push({k: 'main', sp, o});
@@ -44,6 +60,11 @@
         if (u.zone && !zone) continue;
         if (zone && zone.signs.length) for (const sg of zone.signs) out.push({k: 'ut', sp, u, ray: hit.r, zone, sign: sg});
         else out.push({k: 'ut', sp, u, ray: hit.r, zone, sign: null});
+      }
+      for (const r of sp.rays.filter(isMod)) for (const zone of r.zones){ // вопросы включённых модулей
+        if (zone.signs.length) continue;
+        const hint = zoneHint(r, zone);
+        out.push({k: 'ut', sp, mod: true, u: {kod: r.kod, zone: zone.name, q: `${zone.name}${hint ? ' — ' + hint : ''}: как сейчас?`, otv: null, pre: r.question}, ray: r, zone, sign: null});
       }
     }
     out.push({k: 'end'});
@@ -103,7 +124,7 @@
     }
     if (s.k === 'ut'){
       const who = s.sign ? ` — ${s.sign.name}` : '', cur = leafScore(s);
-      let h = `<div class="card"><h2>${esc(s.u.q)}${esc(who)}</h2><p class="legend">Луч «${esc(s.ray.name)}»${s.zone ? `, зона «${esc(s.zone.name)}»` : ''}${cur != null ? ` · сейчас ${cur}${s.ray.approx ? ' (примерно)' : ''}` : ''}</p>`;
+      let h = `<div class="card">${s.mod && s.u.pre ? `<p class="desc">${esc(s.u.pre)}</p>` : ''}<h2>${esc(s.u.q)}${esc(who)}</h2><p class="legend">${s.mod ? 'Модуль · ' : ''}Луч «${esc(s.ray.name)}»${s.zone ? `, зона «${esc(s.zone.name)}»` : ''}${cur != null ? ` · сейчас ${cur}${s.ray.approx ? ' (примерно)' : ''}` : ''}</p>`;
       if (!st.bucket){
         h += `<div class="pick otv">${Object.entries(KUSKI).map(([k, v], n) => `<button class="btn" data-act="opros:bucket" data-v="${k}">${esc(s.u.otv ? s.u.otv[n] : v[2])}</button>`).join('')}</div>`;
         return card(s, h + skipBtns(i, !!s.sign) + `</div>`);
@@ -129,13 +150,13 @@
       const all = S.spheres.flatMap(s => s.rays), none = all.filter(r => r.score == null).length;
       return none === all.length ? 'Заполнить колесо за 10–15 минут — с этого удобно начать' : `Быстро оценить лучи без оценки (${none} из ${all.length})`;
     }},
-    need: p => p.startsWith(DIR),
+    need: p => p.startsWith(DIR) || p === PROFIL,
     view(){ return screen(); },
     act(a, b){
       const all = steps(), i = Math.min(pos(), all.length - 1), s = all[i];
       if (a === 'go'){ go(+b.dataset.i); return; }
       if (a === 'para'){
-        LS.set(key() + '.para', b.dataset.v);
+        LS.set(key() + '.para', b.dataset.v); profSet('пара', b.dataset.v);
         const hit = S.spheres.flatMap(x => [...x.rays, ...x.hiddenRays]).find(r => r.kod === PARA);
         if (hit && b.dataset.v === 'нет' && !hit.hidden){
           change(hit.path, {type: 'fm', sets: [['скрыт', 'true', 'код']], date: today()}, `Опросник: нет пары — скрыт луч «${hit.name}»`);
@@ -143,7 +164,7 @@
         }
         go(i + 1); return;
       }
-      if (a === 'deti'){ LS.set(key() + '.deti', b.dataset.v); go(i + 1); return; }
+      if (a === 'deti'){ LS.set(key() + '.deti', b.dataset.v); profSet('дети', b.dataset.v); go(i + 1); return; }
       if (a === 'main'){
         const n = setMain(s.sp, +b.dataset.v);
         toast(n ? `${s.sp.name}: примерно ${b.dataset.v} — лучей ${n}` : `${s.sp.name}: все лучи уже оценены`);
