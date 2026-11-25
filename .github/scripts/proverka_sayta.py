@@ -768,6 +768,129 @@ def t_valyuty(ctx, port, snimki):
     assert not s.errors, s.errors
 
 
+def kopiya_gh(gh):
+    """Пробная копия ровно с файлами подменённого GitHub (.md): удалённые на нём — удалены и здесь."""
+    d = kopiya({k: v for k, v in gh.files.items()})
+    for f in list(d.rglob("*.md")):
+        rel = f.relative_to(d).as_posix()
+        if not rel.startswith(".git") and rel not in gh.files and not rel.startswith("80 Шаблоны/"):
+            f.unlink()
+    return d
+
+
+def nastroyka_vse(gh):
+    """Как GitHub Actions после поручения «Мои сферы»: nastroyka.py в копии со всеми файлами GitHub; переносы и удаления — обратно."""
+    import shutil
+    d = kopiya_gh(gh)
+    r = subprocess.run([sys.executable, str(d / ".github/scripts/nastroyka.py")], cwd=d, capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout + r.stderr
+    est = set()
+    for f in d.rglob("*.md"):
+        rel = f.relative_to(d).as_posix()
+        if rel.startswith(".git") or rel.startswith("80 Шаблоны/"):
+            continue
+        est.add(rel)
+        text = f.read_text(encoding="utf-8")
+        if gh.files.get(rel) != text:
+            gh.files[rel] = text
+    for rel in [k for k in gh.files if not k.startswith("80 Шаблоны/") and k not in est]:
+        del gh.files[rel]
+    shutil.rmtree(d.parent)
+    return r.stdout
+
+
+def proverit_gh(gh, *names):
+    """Программы хранилища на файлах подменённого GitHub (без --write): без ошибок."""
+    import shutil
+    d = kopiya_gh(gh)
+    for n in names:
+        r = subprocess.run([sys.executable, str(d / ".github/scripts" / n)], cwd=d, capture_output=True, text=True)
+        assert r.returncode == 0 and "✖" not in r.stdout and "Битых ссылок: " not in r.stdout, f"{n}: {r.stdout[-900:]}{r.stderr[-400:]}"
+    shutil.rmtree(d.parent)
+
+
+MOI = "00 Старт/Мои сферы.md"
+
+
+def t_sfery(ctx, port, snimki):
+    """«Мои сферы»: порядок, переименовать, своя сфера с лучами, луч в сфере шаблона, скрыть — поручение → nastroyka.py → ссылки целы."""
+    s = Sayt(ctx, port).open()
+    s.go("#/")
+    s.ждать_текст("Мои сферы")
+    s.go("#/sfery")
+    s.ждать_текст("Порядок на колесе")
+    assert "на колесе — 12" in s.text(), s.text()[:300]
+    s.snimok(snimki, "sfery-spisok")
+    # 1. порядок: «Духовность» на ступень выше
+    s.click("[data-act='sfery:up'][data-v='05']")
+    s.ждать_текст("Сохранить порядок")
+    s.click("Сохранить порядок")
+    s.ждать_записи(1)
+    assert s.gh.commits[-1][0] == MOI, s.gh.commits
+    z = fm_get(s.gh.files[MOI], "заявка")
+    assert len(z) == 1 and z[0].split(" · ")[1:] == ["порядок", "01, 02, 03, 05, 04, 06, 07, 08, 09, 10, 11, 12"], z
+    s.ждать_текст("Меняю сферы")
+    out = nastroyka_vse(s.gh)
+    assert "порядок на колесе" in out, out
+    s.ждать_текст("порядок на колесе: 01, 02, 03, 05, 04", 30000)
+    assert fm_get(s.gh.files["10 Сферы/05 Духовность/05 Духовность.md"], "порядок") == "4"
+    names = [x.strip() for x in s.page.locator("#app .twh b").all_inner_texts()]
+    assert names[3] == "Духовность", names
+    # 2. неверное название — не отправляется
+    s.go("#/sfery/imya/05")
+    s.page.fill("#sfShort", "Смыслы/ценности")
+    n = len(s.gh.commits)
+    s.click("Переименовать")
+    s.ждать(lambda: "нельзя знаки" in s.page.inner_text("#toast"), 3000, "подсказка о знаках")
+    assert len(s.gh.commits) == n
+    # 3. переименовать
+    s.page.fill("#sfShort", "Смыслы")
+    s.page.fill("#sfFull", "Смыслы и ценности")
+    s.snimok(snimki, "sfery-imya")
+    s.click("Переименовать")
+    s.ждать_записи(n + 1)
+    out = nastroyka_vse(s.gh)
+    assert "переименовано: 05 Духовность → 05 Смыслы" in out, out
+    s.ждать_текст("переименовано: 05 Духовность → 05 Смыслы", 30000)
+    assert "10 Сферы/05 Смыслы/05 Смыслы.md" in s.gh.files and not any(k.startswith("10 Сферы/05 Духовность/") for k in s.gh.files)
+    assert not any("[[05 Духовность]]" in v for k, v in s.gh.files.items() if not k.startswith(("80 Шаблоны/", "90 Архив/")))
+    # 4. своя сфера с лучами
+    s.go("#/sfery/novaya")
+    s.page.fill("#sfShort", "Путешествия")
+    s.page.fill("#sfFull", "Путешествия и открытия")
+    s.page.fill("#sfRays", "Страны и города\nПоходы и горы")
+    s.snimok(snimki, "sfery-novaya")
+    s.click("Добавить сферу")
+    s.ждать_записи(n + 2)
+    out = nastroyka_vse(s.gh)
+    assert "добавлена сфера 13 Путешествия" in out, out
+    s.ждать_текст("добавлена сфера 13 путешествия", 30000)
+    luch = "10 Сферы/13 Путешествия/Шкала/13 Луч — Страны и города.md"
+    assert fm_get(s.gh.files[luch], "код") == "13.01" and fm_get(s.gh.files["10 Сферы/13 Путешествия/13 Путешествия.md"], "порядок") == "13"
+    s.go("#/13")
+    s.ждать_текст("Походы и горы")
+    # 5. луч в сфере шаблона — код с 51
+    s.go("#/sfery/imya/02")
+    s.page.fill("#sfLuch", "Юмор")
+    s.click("Добавить луч")
+    s.ждать_записи(n + 3)
+    out = nastroyka_vse(s.gh)
+    s.ждать_текст("добавлен луч 02 луч — юмор", 30000)
+    assert fm_get(s.gh.files["10 Сферы/02 Эмоции/Шкала/02 Луч — Юмор.md"], "код") == "02.51"
+    assert "[[02 Луч — Юмор]]" in s.gh.files["10 Сферы/02 Эмоции/02 Шкала.md"]
+    # 6. скрыть свою сферу и вернуть
+    s.go("#/sfery/imya/13")
+    s.click("Скрыть сферу — не моё сейчас")
+    s.ждать_записи(n + 4)
+    assert fm_get(s.gh.files["10 Сферы/13 Путешествия/13 Путешествия.md"], "скрыта") == "true"
+    s.ждать_текст("Скрытые — не на колесе")
+    s.click("[data-act='sfery:skryt'][data-v='false']")
+    s.ждать_записи(n + 5)
+    assert fm_get(s.gh.files["10 Сферы/13 Путешествия/13 Путешествия.md"], "скрыта") == "false"
+    proverit_gh(s.gh, "check_links.py", "shkala.py", "sled_shag.py", "nedelya.py", "oprosnik.py", "pomoshniki.py")
+    assert not s.errors, s.errors
+
+
 PROVERKI = {k[2:]: v for k, v in list(globals().items()) if k.startswith("t_")}
 
 

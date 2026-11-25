@@ -174,6 +174,7 @@ code{font-family:var(--mono);font-size:13px}
 <script src="ekrany/vygruzka.js"></script>
 <script src="ekrany/ideya.js"></script>
 <script src="ekrany/novoe.js"></script>
+<script src="ekrany/sfery.js"></script>
 <!--/EKRANY-->
 <script>
 'use strict';
@@ -368,6 +369,9 @@ function build(){
   for (const p of S.paths){
     const m = p.match(/^10 Сферы\/((\d\d) ([^/]+))\/Шкала\/[^/]+\.md$/);
     if (m){ if (!sph.has(m[1])) sph.set(m[1], {dir: m[1], nn: m[2], name: m[3], rays: []}); sph.get(m[1]).rayPaths = (sph.get(m[1]).rayPaths || []).concat(p); }
+    // сфера без лучей (своя, только что добавлена на экране «Мои сферы») — по оглавлению
+    const ix = isIdx(p) && p.match(/^10 Сферы\/((\d\d) ([^/]+))\//);
+    if (ix && !sph.has(ix[1])) sph.set(ix[1], {dir: ix[1], nn: ix[2], name: ix[3], rays: []});
   }
   const out = [];
   for (const s of [...sph.values()].sort((a, b) => a.dir.localeCompare(b.dir))){
@@ -375,7 +379,7 @@ function build(){
     const order = [...scaleText.matchAll(/\[\[([^\]|#]+)/g)].map(m => m[1]);
     const sfm = readFm(scaleText), n = v => { v = typeof v === 'string' ? parseFloat(v.replace(',', '.')) : NaN; return isFinite(v) ? v : null; };
     const all = [];
-    for (const p of s.rayPaths){
+    for (const p of s.rayPaths || []){
       const t = view(p); if (t == null) continue;
       if (readFm(t)['тип'] !== 'луч') continue;
       all.push(buildRay(p, t));
@@ -843,7 +847,8 @@ function sphereView(sp){
   let h = tabs(sp.nn) + crumbs(sp) + head(sp.score, sp.name, `Среднее по ${sp.rated} лучам из ${sp.rays.length}`, items, 'сфера', sp.calc);
   h += radar(items) + rows(items) + `<p class="legend">Нажмите на луч: откроются его зоны или сразу линейка уровней. «Примерно» — оценка из опросника: проверьте её по линейке.</p>`;
   if (sp.hiddenRays.length) h += hiddenBlock('Скрытые лучи («не моё»)', sp.hiddenRays.map(r => ({name: r.name, act: 'unhideRay', id: r.path})));
-  if (sp.hasIdx) h += `<div class="pick"><button class="btn" data-act="hideSphere" data-id="${esc(sp.dir)}">Скрыть сферу — не моё сейчас</button></div>`;
+  if (!sp.rays.length) h += `<div class="note">В сфере пока нет лучей. Добавьте первый — на экране «Мои сферы».</div>`;
+  if (sp.hasIdx) h += `<div class="pick"><a class="btn" href="#/sfery/imya/${encodeURIComponent(sp.kod)}">Переименовать или добавить луч</a><button class="btn" data-act="hideSphere" data-id="${esc(sp.dir)}">Скрыть сферу — не моё сейчас</button></div>`;
   return h;
 }
 function hiddenBlock(title, list){
